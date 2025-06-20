@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  music-metadata-editor:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount your music directory here
+      - "/path/to/your/music:/music"
+      # For development - mount source code
+      # - "./src:/usr/src/app/src"
+      # - "./public:/usr/src/app/public"
+    environment:
+      - NODE_ENV=production
+      - MUSIC_DIR=/music
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
