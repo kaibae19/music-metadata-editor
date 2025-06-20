@@ -17,6 +17,7 @@
             <div class="browser-panel">
                 <div class="panel-header">
                     <h3>📁 Files</h3>
+                    <div class="selection-info" id="selectionInfo" style="display: none;"></div>
                     <div class="breadcrumb" id="breadcrumb"></div>
                 </div>
                 <div class="file-list" id="fileList">
@@ -72,6 +73,12 @@
                         <button type="button" id="saveBtn" class="btn-primary">💾 Save Changes</button>
                         <button type="button" id="resetBtn" class="btn-secondary">↩️ Reset</button>
                     </div>
+                    
+                    <div class="file-actions">
+                        <div class="batch-actions" id="batchActions" style="display: none;">
+                            <button type="button" id="clearSelectionBtn" class="btn-secondary">❌ Clear Selection</button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="placeholder" id="placeholder">
@@ -85,6 +92,14 @@
         <div class="status-bar" id="statusBar">
             Ready - Select a music file to begin
         </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="contextMenu" style="display: none;">
+        <div class="context-item" id="contextRename">✏️ Rename</div>
+        <div class="context-item" id="contextDelete">🗑️ Delete</div>
+        <div class="context-separator" id="contextSeparator" style="display: none;"></div>
+        <div class="context-item" id="contextBatchDelete" style="display: none;">🗑️ Delete Selected</div>
     </div>
 
     <script src="js/app.js"></script>

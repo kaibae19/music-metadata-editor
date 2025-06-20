@@ -46,6 +46,7 @@ header p {
     gap: 20px;
     flex: 1;
     min-height: 0;
+    overflow: hidden;
 }
 
 .browser-panel,
@@ -54,21 +55,27 @@ header p {
     border-radius: 12px;
     padding: 20px;
     border: 1px solid #444;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .browser-panel {
     flex: 1;
     min-width: 300px;
+    max-width: 50%;
 }
 
 .editor-panel {
     flex: 1.2;
     min-width: 400px;
+    max-width: 60%;
 }
 
 /* Panel headers */
 .panel-header {
     margin-bottom: 20px;
+    flex-shrink: 0;
 }
 
 .panel-header h3 {
@@ -77,23 +84,63 @@ header p {
     margin-bottom: 5px;
 }
 
+.selection-info {
+    background: #2a4a2a;
+    color: #90ee90;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    margin-bottom: 10px;
+    height: 24px; /* Fixed height */
+    display: flex;
+    align-items: center;
+    transition: opacity 0.2s ease;
+}
+
+.selection-info.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
 .breadcrumb {
     color: #888;
     font-size: 0.9em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.breadcrumb-part {
+    color: #888;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.breadcrumb-part:hover {
+    color: #4a9eff;
+}
+
+.breadcrumb-separator {
+    margin: 0 5px;
+    color: #666;
 }
 
 .file-info {
     color: #888;
     font-size: 0.9em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* File browser */
 .file-list {
-    max-height: 600px;
+    flex: 1;
     overflow-y: auto;
     border: 1px solid #444;
     border-radius: 8px;
     background: #1a1a1a;
+    min-height: 0;
 }
 
 .file-item {
@@ -104,6 +151,7 @@ header p {
     align-items: center;
     gap: 10px;
     transition: background-color 0.2s;
+    overflow: hidden;
 }
 
 .file-item:hover {
@@ -115,23 +163,51 @@ header p {
     color: white;
 }
 
+.file-item.multi-selected {
+    background: #2a4a7a;
+    color: white;
+}
+
+.file-item.multi-selected:hover {
+    background: #4a6aaa;
+}
+
 .file-item.directory {
     font-weight: 500;
 }
 
 .file-item.directory:before {
     content: "📁";
+    flex-shrink: 0;
+}
+
+.file-item.parent:before {
+    content: "📁";
+    flex-shrink: 0;
+}
+
+.file-item.parent {
+    font-weight: 600;
+    color: #4a9eff;
 }
 
 .file-item.file:before {
     content: "🎵";
+    flex-shrink: 0;
+}
+
+.file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .file-extension {
     font-size: 0.8em;
     color: #888;
-    margin-left: auto;
     text-transform: uppercase;
+    flex-shrink: 0;
 }
 
 .loading {
@@ -145,6 +221,9 @@ header p {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .form-group {
@@ -160,6 +239,7 @@ header p {
 
 .form-row .form-group {
     flex: 1;
+    min-width: 0;
 }
 
 label {
@@ -177,6 +257,8 @@ input[type="number"] {
     color: #e0e0e0;
     font-size: 1em;
     transition: border-color 0.2s;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 input[type="text"]:focus,
@@ -190,6 +272,60 @@ input[type="number"]:focus {
 .form-actions {
     display: flex;
     gap: 10px;
+    margin-top: 10px;
+}
+
+.file-actions {
+    margin-top: 30px;
+}
+
+.file-actions h4 {
+    color: #ccc;
+    margin-bottom: 10px;
+    font-size: 1em;
+}
+
+/* Context Menu */
+.context-menu {
+    position: fixed;
+    background: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    min-width: 150px;
+    padding: 4px 0;
+}
+
+.context-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    color: #e0e0e0;
+    font-size: 0.9em;
+    transition: background-color 0.2s;
+}
+
+.context-item:hover {
+    background: #4a9eff;
+    color: white;
+}
+
+.context-item.danger:hover {
+    background: #e74c3c;
+}
+
+.context-separator {
+    height: 1px;
+    background: #555;
+    margin: 4px 0;
+}
+
+/* Remove old file action buttons */
+.file-action-buttons {
+    display: none;
+}
+
+.batch-actions {
     margin-top: 10px;
 }
 
@@ -219,6 +355,24 @@ button {
 
 .btn-secondary:hover {
     background: #555;
+}
+
+.btn-warning {
+    background: #f39c12;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #e67e22;
+}
+
+.btn-danger {
+    background: #e74c3c;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c0392b;
 }
 
 button:disabled {
@@ -263,16 +417,48 @@ button:disabled {
 }
 
 /* Responsive */
+@media (max-width: 1200px) {
+    .browser-panel,
+    .editor-panel {
+        min-width: 250px;
+    }
+    
+    .browser-panel {
+        max-width: none;
+    }
+    
+    .editor-panel {
+        max-width: none;
+    }
+}
+
 @media (max-width: 768px) {
     .main-content {
         flex-direction: column;
+        gap: 15px;
+    }
+    
+    .browser-panel,
+    .editor-panel {
+        min-width: auto;
+        max-width: none;
+        flex: none;
+    }
+    
+    .browser-panel {
+        max-height: 300px;
     }
     
     .form-row {
         flex-direction: column;
+        gap: 10px;
     }
     
     header h1 {
         font-size: 2em;
+    }
+    
+    .container {
+        padding: 15px;
     }
 }

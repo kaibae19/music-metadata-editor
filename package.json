@@ -1,30 +1,16 @@
-# Dependencies
-node_modules/
-npm-debug.log*
-
-# Runtime
-*.log
-.env
-.env.local
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Docker
-docker-compose.override.yml
-
-# Temporary files
-tmp/
-temp/
+{
+  "name": "music-metadata-editor",
+  "version": "1.0.0",
+  "description": "Simple web-based music file metadata editor for SONARR pipeline integration",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "music-metadata": "^7.14.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
