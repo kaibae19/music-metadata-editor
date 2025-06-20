@@ -6,6 +6,12 @@
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+## 📸 Screenshots
+
+![Music Metadata Editor Interface](screenshots/main-interface.png)
+
+*Clean two-panel interface showing file browser and metadata editor*
+
 ## 🎯 What It Does
 
 A complete file management and metadata editing solution designed for music library automation:
