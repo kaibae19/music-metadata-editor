@@ -36,25 +36,40 @@ A **polished, professional** file management and metadata editing solution with 
 
 ## 🚀 Quick Start
 
+### **Option 1: Pre-built Docker Image (Recommended)**
 ```bash
-# Clone and run with Docker
-git clone https://github.com/yourusername/music-metadata-editor.git
-cd music-metadata-editor
-
-# Build and run
-docker build -t music-metadata-editor .
-docker run -p 3000:3000 -v /path/to/your/music:/music music-metadata-editor
+# Pull and run the latest image from GitHub Container Registry
+docker run -d \
+  --name music-metadata-editor \
+  -p 3000:3000 \
+  -v /path/to/your/music:/music \
+  ghcr.io/kaibae19/music-metadata-editor:latest
 
 # Access the beautiful web interface
 open http://localhost:3000
 ```
 
+### **Option 2: Build from Source**
+```bash
+# Clone and build yourself
+git clone https://github.com/kaibae19/music-metadata-editor.git
+cd music-metadata-editor
+docker build -t music-metadata-editor .
+docker run -p 3000:3000 -v /path/to/your/music:/music music-metadata-editor
+```
+
 ### **🧪 Testing with Read-Only Mode**
 ```bash
-# Use the deployment script for easy testing
+# Test permission handling safely with pre-built image
+docker run -d \
+  --name music-editor-test \
+  -p 3000:3000 \
+  -v /path/to/your/music:/music:ro \
+  ghcr.io/kaibae19/music-metadata-editor:latest
+
+# Or use the deployment script for local builds
 chmod +x deploy.sh
 ./deploy.sh
-
 # Choose option 2 for read-only testing (safe)
 # Choose option 1 for full read-write mode
 ```
