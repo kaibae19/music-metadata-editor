@@ -1,6 +1,71 @@
 // File: public/js/app.js
 // Music Metadata Editor Frontend - FOR public/js/app.js ONLY
 
+// Theme Management
+class ThemeManager {
+    constructor() {
+        this.theme = this.getStoredTheme() || 'dark'; // Default to dark
+        this.init();
+    }
+
+    init() {
+        this.applyTheme(this.theme);
+        this.setupToggle();
+    }
+
+    getStoredTheme() {
+        try {
+            return localStorage.getItem('music-editor-theme');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    setStoredTheme(theme) {
+        try {
+            localStorage.setItem('music-editor-theme', theme);
+        } catch (e) {
+            // localStorage not available, continue anyway
+        }
+    }
+
+    applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        this.updateToggleButton(theme);
+        this.setStoredTheme(theme);
+    }
+
+    updateToggleButton(theme) {
+        const themeIcon = document.getElementById('themeIcon');
+        const themeText = document.getElementById('themeText');
+        
+        if (themeIcon && themeText) {
+            if (theme === 'light') {
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Light';
+            } else {
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Dark';
+            }
+        }
+    }
+
+    setupToggle() {
+        const themeToggle = document.getElementById('themeToggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                this.theme = this.theme === 'dark' ? 'light' : 'dark';
+                this.applyTheme(this.theme);
+            });
+        }
+    }
+
+    toggle() {
+        this.theme = this.theme === 'dark' ? 'light' : 'dark';
+        this.applyTheme(this.theme);
+    }
+}
+
 class MetadataEditor {
     constructor() {
         this.currentPath = '';
@@ -8,6 +73,9 @@ class MetadataEditor {
         this.selectedItems = new Set();
         this.originalMetadata = null;
         this.scrollPositions = new Map();
+
+        // Initialize theme manager first
+        this.themeManager = new ThemeManager();
 
         this.initializeElements();
         this.setupEventListeners();
