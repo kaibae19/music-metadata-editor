@@ -18,11 +18,20 @@ class MetadataWriter {
     }
 
     /**
-     * Check if format is supported for writing
+     * Enhanced format checking with better error messages
      */
     isSupported(filePath) {
+        if (!filePath || typeof filePath !== 'string') {
+            console.log('Invalid file path provided to isSupported:', filePath);
+            return false;
+        }
+        
         const ext = this.getFileExtension(filePath);
-        return this.supportedFormats.includes(ext);
+        const isSupported = this.supportedFormats.includes(ext);
+        
+        console.log(`Format check for ${path.basename(filePath)}: ${ext} -> ${isSupported ? 'SUPPORTED' : 'NOT SUPPORTED'}`);
+        
+        return isSupported;
     }
 
     /**
@@ -220,29 +229,61 @@ class MetadataWriter {
     }
 
     /**
-     * Write metadata to multiple files
+     * Enhanced batch metadata writing with better error handling
      */
     async writeBatchMetadata(filePaths, metadata) {
         const results = [];
         let successCount = 0;
         let permissionDeniedCount = 0;
 
+        console.log(`Starting batch write for ${filePaths.length} files`);
+
         for (const filePath of filePaths) {
-            const result = await this.writeMetadata(filePath, metadata);
-            
-            if (result.success) {
-                successCount++;
-            } else if (result.code === 'PERMISSION_DENIED') {
-                permissionDeniedCount++;
+            try {
+                // Double-check that the file is supported (defensive programming)
+                if (!this.isSupported(filePath)) {
+                    const ext = this.getFileExtension(filePath);
+                    results.push({
+                        file: path.basename(filePath),
+                        success: false,
+                        error: `Unsupported format: ${ext}`,
+                        code: 'UNSUPPORTED_FORMAT'
+                    });
+                    console.log(`Skipping unsupported file in batch: ${path.basename(filePath)}`);
+                    continue;
+                }
+
+                const result = await this.writeMetadata(filePath, metadata);
+                
+                if (result.success) {
+                    successCount++;
+                    console.log(`✅ Batch update success: ${path.basename(filePath)}`);
+                } else if (result.code === 'PERMISSION_DENIED') {
+                    permissionDeniedCount++;
+                    console.log(`❌ Batch update permission denied: ${path.basename(filePath)}`);
+                } else {
+                    console.log(`❌ Batch update failed: ${path.basename(filePath)} - ${result.error}`);
+                }
+                
+                results.push({
+                    file: path.basename(filePath),
+                    success: result.success,
+                    error: result.error,
+                    code: result.code
+                });
+                
+            } catch (error) {
+                console.error(`Exception during batch update for ${path.basename(filePath)}:`, error);
+                results.push({
+                    file: path.basename(filePath),
+                    success: false,
+                    error: error.message,
+                    code: 'EXCEPTION'
+                });
             }
-            
-            results.push({
-                file: path.basename(filePath),
-                success: result.success,
-                error: result.error,
-                code: result.code
-            });
         }
+
+        console.log(`Batch write complete: ${successCount}/${filePaths.length} successful`);
 
         return {
             success: successCount > 0,

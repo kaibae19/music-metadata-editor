@@ -17,13 +17,17 @@
             <p>Simple metadata cleanup for LIDARR pipeline</p>
         </header>
 
-
-
         <div class="main-content">
             <div class="browser-panel">
                 <div class="panel-header">
                     <h3>📁 Files</h3>
-                    <div class="selection-info" id="selectionInfo" style="display: none;"></div>
+                    <div class="selection-controls">
+                        <button class="select-all-btn" id="selectAllBtn" title="Select all visible items">
+                            <span>📋</span>
+                            <span id="selectAllText">Select All</span>
+                        </button>
+                        <div class="selection-info" id="selectionInfo" style="display: none;"></div>
+                    </div>
                     <div class="breadcrumb" id="breadcrumb"></div>
                 </div>
                 <div class="file-list" id="fileList">

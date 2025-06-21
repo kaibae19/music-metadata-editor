@@ -1,5 +1,5 @@
 // File: public/js/app.js
-// Music Metadata Editor Frontend - FOR public/js/app.js ONLY
+// Music Metadata Editor Frontend - Enhanced with Select All and Batch Fix
 
 // Theme Management
 class ThemeManager {
@@ -73,6 +73,7 @@ class MetadataEditor {
         this.selectedItems = new Set();
         this.originalMetadata = null;
         this.scrollPositions = new Map();
+        this.currentItems = []; // Store current visible items
 
         // Initialize theme manager first
         this.themeManager = new ThemeManager();
@@ -104,6 +105,10 @@ class MetadataEditor {
         this.clearSelectionBtn = document.getElementById('clearSelectionBtn');
         this.batchActions = document.getElementById('batchActions');
 
+        // Select All button elements
+        this.selectAllBtn = document.getElementById('selectAllBtn');
+        this.selectAllText = document.getElementById('selectAllText');
+
         this.contextMenu = document.getElementById('contextMenu');
         this.contextRename = document.getElementById('contextRename');
         this.contextDelete = document.getElementById('contextDelete');
@@ -117,6 +122,11 @@ class MetadataEditor {
         this.saveBtn.addEventListener('click', () => this.saveMetadata());
         this.resetBtn.addEventListener('click', () => this.resetForm());
         this.clearSelectionBtn.addEventListener('click', () => this.clearSelection());
+
+        // Select All button listener
+        if (this.selectAllBtn) {
+            this.selectAllBtn.addEventListener('click', () => this.handleSelectAll());
+        }
 
         this.contextRename.addEventListener('click', () => this.handleContextRename());
         this.contextDelete.addEventListener('click', () => this.handleContextDelete());
@@ -139,6 +149,87 @@ class MetadataEditor {
         });
     }
 
+    handleSelectAll() {
+        const selectableItems = this.currentItems.filter(item => 
+            item.type !== 'parent' && 
+            (item.type === 'directory' || item.type === 'file')
+        );
+
+        if (selectableItems.length === 0) {
+            this.setStatus('No items to select', 'warning');
+            return;
+        }
+
+        const allSelected = selectableItems.every(item => {
+            const itemKey = item.type + ':' + item.path;
+            return this.selectedItems.has(itemKey);
+        });
+
+        if (allSelected) {
+            // Deselect all
+            this.clearSelection();
+            this.setStatus('Selection cleared', 'info');
+        } else {
+            // Select all
+            this.clearSelection(); // Clear first to ensure clean state
+            
+            selectableItems.forEach(item => {
+                const itemKey = item.type + ':' + item.path;
+                this.selectedItems.add(itemKey);
+                
+                // Update visual state
+                const element = this.findFileItemByPath(item.path);
+                if (element) {
+                    element.classList.add('multi-selected');
+                }
+            });
+
+            this.updateSelectionUI();
+            this.setStatus(`Selected ${selectableItems.length} items`, 'success');
+        }
+
+        this.updateSelectAllButton();
+    }
+
+    findFileItemByPath(path) {
+        const fileItems = this.fileList.querySelectorAll('.file-item');
+        for (const item of fileItems) {
+            if (item.dataset.path === path) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    updateSelectAllButton() {
+        if (!this.selectAllBtn) return;
+
+        const selectableItems = this.currentItems.filter(item => 
+            item.type !== 'parent' && 
+            (item.type === 'directory' || item.type === 'file')
+        );
+
+        if (selectableItems.length === 0) {
+            this.selectAllBtn.style.display = 'none';
+            return;
+        }
+
+        this.selectAllBtn.style.display = 'flex';
+
+        const allSelected = selectableItems.every(item => {
+            const itemKey = item.type + ':' + item.path;
+            return this.selectedItems.has(itemKey);
+        });
+
+        if (allSelected && selectableItems.length > 0) {
+            this.selectAllText.textContent = 'Deselect All';
+            this.selectAllBtn.title = 'Deselect all visible items';
+        } else {
+            this.selectAllText.textContent = 'Select All';
+            this.selectAllBtn.title = 'Select all visible items';
+        }
+    }
+
     async loadFiles(path = '') {
         try {
             this.setStatus('Loading files...', 'info');
@@ -155,8 +246,10 @@ class MetadataEditor {
             }
 
             this.currentPath = data.currentPath;
+            this.currentItems = data.items; // Store current items
             this.renderFileList(data.items);
             this.updateBreadcrumb();
+            this.updateSelectAllButton(); // Update select all button state
 
             const savedPosition = this.scrollPositions.get(this.currentPath);
             if (savedPosition !== undefined) {
@@ -252,6 +345,7 @@ class MetadataEditor {
             item.classList.remove('multi-selected', 'selected');
         });
         this.updateSelectionUI();
+        this.updateSelectAllButton(); // Update select all button when clearing
 
         this.selectedFile = null;
         this.metadataForm.style.display = 'none';
@@ -265,12 +359,14 @@ class MetadataEditor {
             this.selectionInfo.classList.add('hidden');
             this.selectionInfo.textContent = '';
             this.batchActions.style.display = 'none';
+            this.updateSelectAllButton(); // Update button state
             return;
         }
 
         this.selectionInfo.classList.remove('hidden');
         this.selectionInfo.textContent = count + ' item' + (count > 1 ? 's' : '') + ' selected';
         this.batchActions.style.display = 'block';
+        this.updateSelectAllButton(); // Update button state
 
         const selectedFiles = Array.from(this.selectedItems).filter(item => item.startsWith('file:'));
         if (selectedFiles.length > 0 && selectedFiles.length === count) {
@@ -424,10 +520,12 @@ class MetadataEditor {
             genre: this.genreInput.value.trim()
         };
 
+        // Check if we have multiple items selected (batch mode)
         if (this.selectedItems.size > 0) {
             return this.saveBatchMetadata(metadata);
         }
 
+        // Single file mode
         if (!this.selectedFile) return;
 
         this.saveBtn.disabled = true;
@@ -466,6 +564,7 @@ class MetadataEditor {
         }
     }
 
+    // FIXED BATCH METADATA SAVE - Correct endpoint
     async saveBatchMetadata(metadata) {
         const selectedFiles = Array.from(this.selectedItems)
             .filter(item => item.startsWith('file:'))
@@ -487,6 +586,10 @@ class MetadataEditor {
                 }
             });
 
+            console.log('Sending batch update for files:', selectedFiles);
+            console.log('Metadata to apply:', batchMetadata);
+
+            // CORRECTED: Use the batch endpoint, not the single file endpoint
             const response = await fetch('/api/metadata/batch', {
                 method: 'POST',
                 headers: {
@@ -499,20 +602,33 @@ class MetadataEditor {
             });
 
             const data = await response.json();
+            console.log('Batch update response:', data);
 
             if (!response.ok) {
                 if (response.status === 403) {
                     this.setStatus('⚠️ File system is read-only - cannot save changes. Remove read-only flag to enable writing.', 'error');
+                } else if (response.status === 400 && data.supportedFormats) {
+                    this.setStatus(`⚠️ ${data.error}. Supported formats: ${data.supportedFormats.join(', ')}`, 'error');
                 } else {
                     throw new Error(data.error || 'Failed to save batch metadata');
                 }
                 return;
             }
 
-            // Handle partial success scenarios
-            if (data.code === 'SOME_PERMISSION_DENIED') {
+            // Handle success responses
+            if (data.code === 'PARTIAL_SUCCESS_WITH_SKIPPED') {
                 this.setStatus(`⚠️ ${data.message}`, 'warning');
-            } else if (data.successCount === data.totalFiles) {
+                
+                if (data.skippedDetails && data.skippedDetails.length > 0) {
+                    console.warn('Skipped files:', data.skippedDetails);
+                    setTimeout(() => {
+                        const skippedFormats = data.skippedDetails.map(d => d.reason).join(', ');
+                        this.setStatus(`Skipped: ${skippedFormats}`, 'info');
+                    }, 3000);
+                }
+            } else if (data.code === 'SOME_PERMISSION_DENIED') {
+                this.setStatus(`⚠️ ${data.message}`, 'warning');
+            } else if (data.successCount === data.processedFiles) {
                 this.setStatus(`✅ ${data.message}`, 'success');
             } else if (data.successCount > 0) {
                 this.setStatus(`⚠️ ${data.message}`, 'warning');
@@ -520,12 +636,29 @@ class MetadataEditor {
                 this.setStatus(`❌ ${data.message}`, 'error');
             }
 
-            // Log detailed results for debugging
+            // Log detailed results
             if (data.results && data.results.length > 0) {
                 const failures = data.results.filter(r => !r.success);
                 if (failures.length > 0) {
-                    console.warn('Some files failed to update:', failures);
+                    console.warn('Failed files:', failures);
                 }
+                
+                const successes = data.results.filter(r => r.success);
+                if (successes.length > 0) {
+                    console.log('Successfully updated:', successes.map(s => s.file));
+                }
+            }
+
+            // Show breakdown for mixed results
+            if (data.skippedFiles > 0 || data.failedCount > 0) {
+                setTimeout(() => {
+                    const breakdown = [];
+                    if (data.successCount > 0) breakdown.push(`${data.successCount} updated`);
+                    if (data.skippedFiles > 0) breakdown.push(`${data.skippedFiles} skipped`);
+                    if (data.failedCount > 0) breakdown.push(`${data.failedCount} failed`);
+                    
+                    this.setStatus(`Complete: ${breakdown.join(', ')}`, 'info');
+                }, 3000);
             }
 
         } catch (error) {
@@ -846,60 +979,29 @@ class MetadataEditor {
     }
 
     handleContextRename() {
-        console.log('handleContextRename called');
-        console.log('contextTarget:', this.contextTarget);
-
         const target = this.contextTarget;
         this.hideContextMenu();
-
         if (target) {
-            console.log('Calling renameSingleItem with:', target.path, target.type);
             this.renameSingleItem(target.path, target.type);
-        } else {
-            console.log('No contextTarget found for rename!');
         }
     }
 
     handleContextDelete() {
-        console.log('handleContextDelete called');
-        console.log('contextTarget:', this.contextTarget);
-
         const target = this.contextTarget;
         this.hideContextMenu();
-
         if (target) {
-            console.log('Context target type:', target.type);
-            console.log('Context target path:', target.path);
-
             if (target.type === 'directory') {
-                console.log('Calling deleteSingleDirectory');
                 this.deleteSingleDirectory(target.path);
             } else {
-                console.log('Calling deleteSingleFileByPath');
                 this.deleteSingleFileByPath(target.path);
             }
-        } else {
-            console.log('No contextTarget found!');
         }
     }
 
     async deleteSingleDirectory(dirPath) {
-        console.log('deleteSingleDirectory called with path:', dirPath);
-
         const dirName = dirPath.split('/').pop();
-
-        const warning = 'DANGER: Delete Directory\n\n' +
-                       'You are about to PERMANENTLY DELETE:\n' +
-                       '"' + dirName + '" and ALL files/folders inside it.\n\n' +
-                       'This will delete:\n' +
-                       '• All music files in this directory\n' +
-                       '• All subdirectories and their contents\n' +
-                       '• ALL metadata and file organization\n\n' +
-                       'THIS CANNOT BE UNDONE!\n\n' +
-                       'Type "DELETE" (all caps) to confirm:';
-
+        const warning = 'DANGER: Delete Directory\n\nYou are about to PERMANENTLY DELETE:\n"' + dirName + '" and ALL files/folders inside it.\n\nTHIS CANNOT BE UNDONE!\n\nType "DELETE" (all caps) to confirm:';
         const confirmation = prompt(warning);
-        console.log('User confirmation:', confirmation);
 
         if (confirmation !== 'DELETE') {
             this.setStatus('Directory deletion cancelled', 'info');
@@ -909,110 +1011,48 @@ class MetadataEditor {
         this.setStatus('Deleting directory...', 'info');
 
         try {
-            console.log('Sending delete request for:', dirPath);
             const response = await fetch('/api/directory/delete', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    dirPath: dirPath
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dirPath: dirPath })
             });
 
-            console.log('Delete response status:', response.status);
             const data = await response.json();
-            console.log('Delete response data:', data);
-
             if (!response.ok) {
                 throw new Error(data.error || 'Failed to delete directory');
             }
 
             this.setStatus('Directory deleted successfully', 'success');
             this.loadFiles(this.currentPath);
-
         } catch (error) {
-            console.error('Error deleting directory:', error);
             this.setStatus('Error: ' + error.message, 'error');
         }
     }
 
     async deleteSingleFileByPath(filePath) {
-        console.log('deleteSingleFileByPath called with path:', filePath);
-
         const fileName = filePath.split('/').pop();
-
         if (!confirm('Are you sure you want to delete "' + fileName + '"?\n\nThis action cannot be undone.')) {
-            console.log('User cancelled file deletion');
             return;
         }
 
         this.setStatus('Deleting file...', 'info');
 
         try {
-            console.log('Sending delete request for file:', filePath);
             const response = await fetch('/api/file/delete', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    filePath: filePath
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filePath: filePath })
             });
 
-            console.log('File delete response status:', response.status);
             const data = await response.json();
-            console.log('File delete response data:', data);
-
             if (!response.ok) {
                 throw new Error(data.error || 'Failed to delete file');
             }
 
             this.setStatus('File deleted successfully', 'success');
             this.loadFiles(this.currentPath);
-
         } catch (error) {
-            console.error('Error deleting file:', error);
             this.setStatus('Error: ' + error.message, 'error');
-        }
-    }
-
-    handleBreadcrumbContextMenu(element, event) {
-        event.preventDefault();
-
-        const path = element.dataset.path;
-        const type = element.dataset.type;
-
-        console.log('Breadcrumb context menu - path:', path, 'type:', type);
-
-        if (type === 'root' || path === '' || path === '/music') {
-            return;
-        }
-
-        let cleanPath = path;
-        if (path && path.startsWith('/')) {
-            cleanPath = path.substring(1);
-        }
-
-        console.log('Setting contextTarget with cleanPath:', cleanPath);
-        this.contextTarget = { element, path: cleanPath, type: 'directory' };
-
-        this.contextRename.style.display = 'block';
-        this.contextDelete.style.display = 'block';
-        this.contextBatchDelete.style.display = 'none';
-        this.contextSeparator.style.display = 'none';
-
-        this.contextMenu.style.left = event.pageX + 'px';
-        this.contextMenu.style.top = event.pageY + 'px';
-        this.contextMenu.style.display = 'block';
-
-        const rect = this.contextMenu.getBoundingClientRect();
-        if (rect.right > window.innerWidth) {
-            this.contextMenu.style.left = (event.pageX - rect.width) + 'px';
-        }
-        if (rect.bottom > window.innerHeight) {
-            this.contextMenu.style.top = (event.pageY - rect.height) + 'px';
         }
     }
 }

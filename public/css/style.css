@@ -566,3 +566,62 @@ button:disabled {
         /* Override with light theme only if explicitly set */
     }
 }
+
+/* Selection controls */
+.selection-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    min-height: 32px;
+}
+
+.select-all-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.select-all-btn:hover {
+    background: var(--hover-bg);
+    border-color: var(--text-accent);
+}
+
+.select-all-btn:active {
+    transform: translateY(1px);
+}
+
+/* Update selection info to work with new layout */
+.selection-info {
+    background: var(--selection-bg);
+    color: var(--success-text);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    transition: opacity 0.2s ease, background-color 0.3s ease;
+    flex: 1;
+}
+
+.selection-info.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Responsive design for selection controls */
+@media (max-width: 768px) {
+    .selection-controls {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+}
