@@ -8,6 +8,8 @@
 ![Metadata Writing](https://img.shields.io/badge/Metadata%20Writing-✅%20Working-success)
 ![Select All](https://img.shields.io/badge/Select%20All-✅%20Implemented-orange)
 
+![Music Metadata Editor Interface](https://github.com/kaibae19/music-metadata-editor/blob/main/screenshots/main-interface.png)
+
 ## ✨ What Makes This Special
 
 A **polished, professional** file management and metadata editing solution with beautiful dark/light themes and advanced bulk operations:
