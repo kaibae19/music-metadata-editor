@@ -1,3 +1,4 @@
+/* File: public/css/style.css */
 /* Reset and base styles */
 * {
     margin: 0;
@@ -414,6 +415,11 @@ button:disabled {
 .status-bar.error {
     background: #5a2d2d;
     color: #ff9090;
+}
+
+.status-bar.warning {
+    background: #5a4a2d;
+    color: #ffdd90;
 }
 
 /* Responsive */

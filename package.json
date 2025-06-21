@@ -1,14 +1,17 @@
 {
   "name": "music-metadata-editor",
   "version": "1.0.0",
-  "description": "Simple web-based music file metadata editor for SONARR pipeline integration",
+  "description": "Simple web-based music file metadata editor for LIDARR pipeline integration",
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "music-metadata": "^7.14.0"
+    "music-metadata": "^7.14.0",
+    "node-id3": "^0.2.6",
+    "metaflac-js2": "^1.0.8",
+    "mp3tag.js": "^3.11.2"
   },
   "engines": {
     "node": ">=16.0.0"

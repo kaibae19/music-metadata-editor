@@ -1,3 +1,4 @@
+// File: public/js/app.js
 // Music Metadata Editor Frontend - FOR public/js/app.js ONLY
 
 class MetadataEditor {
@@ -376,15 +377,22 @@ class MetadataEditor {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || 'Failed to save metadata');
+                if (response.status === 403 && data.code === 'PERMISSION_DENIED') {
+                    this.setStatus('⚠️ File system is read-only - cannot save changes. Remove read-only flag to enable writing.', 'error');
+                } else if (response.status === 400 && data.code === 'UNSUPPORTED_FORMAT') {
+                    this.setStatus('⚠️ ' + data.error, 'error');
+                } else {
+                    throw new Error(data.error || 'Failed to save metadata');
+                }
+                return;
             }
 
             this.originalMetadata = Object.assign({}, metadata);
-            this.setStatus(data.message || 'Metadata saved successfully', 'success');
+            this.setStatus('✅ ' + (data.message || 'Metadata saved successfully'), 'success');
 
         } catch (error) {
             console.error('Error saving metadata:', error);
-            this.setStatus('Error: ' + error.message, 'error');
+            this.setStatus('❌ Error: ' + error.message, 'error');
         } finally {
             this.saveBtn.disabled = false;
         }
@@ -425,18 +433,36 @@ class MetadataEditor {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || 'Failed to save batch metadata');
+                if (response.status === 403) {
+                    this.setStatus('⚠️ File system is read-only - cannot save changes. Remove read-only flag to enable writing.', 'error');
+                } else {
+                    throw new Error(data.error || 'Failed to save batch metadata');
+                }
+                return;
             }
 
-            this.setStatus(data.message || 'Batch metadata saved successfully', 'success');
+            // Handle partial success scenarios
+            if (data.code === 'SOME_PERMISSION_DENIED') {
+                this.setStatus(`⚠️ ${data.message}`, 'warning');
+            } else if (data.successCount === data.totalFiles) {
+                this.setStatus(`✅ ${data.message}`, 'success');
+            } else if (data.successCount > 0) {
+                this.setStatus(`⚠️ ${data.message}`, 'warning');
+            } else {
+                this.setStatus(`❌ ${data.message}`, 'error');
+            }
 
-            if (data.errors && data.errors.length > 0) {
-                console.warn('Some files had errors:', data.errors);
+            // Log detailed results for debugging
+            if (data.results && data.results.length > 0) {
+                const failures = data.results.filter(r => !r.success);
+                if (failures.length > 0) {
+                    console.warn('Some files failed to update:', failures);
+                }
             }
 
         } catch (error) {
             console.error('Error saving batch metadata:', error);
-            this.setStatus('Error: ' + error.message, 'error');
+            this.setStatus('❌ Error: ' + error.message, 'error');
         } finally {
             this.saveBtn.disabled = false;
         }

@@ -1,3 +1,4 @@
+// File: src/app.js
 // Music Metadata Editor Backend
 
 const express = require('express');
@@ -8,6 +9,10 @@ const { parseFile } = require('music-metadata');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MUSIC_DIR = '/music';
+
+// Initialize metadata writer
+const MetadataWriter = require('./metadata/writer');
+const metadataWriter = new MetadataWriter();
 
 // Middleware
 app.use(express.json());
@@ -110,16 +115,43 @@ app.post('/api/metadata/:path(*)', async (req, res) => {
     try {
         const relativePath = req.params.path;
         const { metadata } = req.body;
+        const fullPath = getFullPath(relativePath);
         
-        console.log('Update metadata request for:', relativePath);
+        console.log('Update metadata request for:', fullPath);
         console.log('New metadata:', metadata);
         
-        // TODO: Implement actual metadata writing
-        // For now, just return success
-        res.json({ 
-            message: 'Metadata update simulated (not implemented yet)',
-            success: true 
-        });
+        // Check if format is supported
+        if (!metadataWriter.isSupported(fullPath)) {
+            const ext = path.extname(fullPath).toLowerCase();
+            return res.status(400).json({ 
+                error: `Unsupported format: ${ext}. Supported formats: ${metadataWriter.supportedFormats.join(', ')}`,
+                code: 'UNSUPPORTED_FORMAT'
+            });
+        }
+        
+        const result = await metadataWriter.writeMetadata(fullPath, metadata);
+        
+        if (result.success) {
+            console.log(`Successfully updated metadata for: ${path.basename(fullPath)}`);
+            res.json({ 
+                success: true, 
+                message: `Metadata updated successfully for ${path.basename(fullPath)}` 
+            });
+        } else {
+            console.error(`Failed to update metadata for ${fullPath}:`, result.error);
+            
+            if (result.code === 'PERMISSION_DENIED') {
+                res.status(403).json({ 
+                    error: result.error,
+                    code: result.code 
+                });
+            } else {
+                res.status(500).json({ 
+                    error: result.error,
+                    code: result.code || 'WRITE_FAILED'
+                });
+            }
+        }
         
     } catch (error) {
         console.error('Error updating metadata:', error);
@@ -132,16 +164,39 @@ app.post('/api/metadata/batch', async (req, res) => {
     try {
         const { filePaths, metadata } = req.body;
         
+        if (!Array.isArray(filePaths) || filePaths.length === 0) {
+            return res.status(400).json({ error: 'No files provided' });
+        }
+        
         console.log('Batch metadata update for:', filePaths.length, 'files');
         console.log('New metadata:', metadata);
         
-        // TODO: Implement actual batch metadata writing
-        // For now, just return success
-        res.json({ 
-            message: `Batch metadata update simulated for ${filePaths.length} files (not implemented yet)`,
-            success: true,
-            errors: []
-        });
+        // Convert relative paths to full paths
+        const fullPaths = filePaths.map(relativePath => getFullPath(relativePath));
+        
+        const result = await metadataWriter.writeBatchMetadata(fullPaths, metadata);
+        
+        let response = {
+            success: result.success,
+            totalFiles: result.totalFiles,
+            successCount: result.successCount,
+            failedCount: result.failedCount,
+            results: result.results
+        };
+        
+        if (result.permissionDeniedCount > 0) {
+            response.code = 'SOME_PERMISSION_DENIED';
+            response.message = `Updated ${result.successCount}/${result.totalFiles} files. ${result.permissionDeniedCount} files could not be written due to permissions.`;
+        } else if (result.successCount === result.totalFiles) {
+            response.message = `Successfully updated metadata for all ${result.successCount} files.`;
+        } else if (result.successCount > 0) {
+            response.message = `Updated ${result.successCount}/${result.totalFiles} files successfully.`;
+        } else {
+            response.message = 'Failed to update any files.';
+        }
+        
+        console.log(`Batch update complete: ${result.successCount}/${result.totalFiles} files updated`);
+        res.json(response);
         
     } catch (error) {
         console.error('Error updating batch metadata:', error);
