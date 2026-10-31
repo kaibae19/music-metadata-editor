@@ -4,7 +4,8 @@
   "description": "Simple web-based music file metadata editor for LIDARR pipeline integration",
   "main": "src/app.js",
   "scripts": {
-    "start": "node src/app.js"
+    "start": "node src/app.js",
+    "test": "node --test test/"
   },
   "dependencies": {
     "express": "^4.18.2",
