@@ -148,7 +148,7 @@ music-metadata-editor/
 | Format | Reading | Writing | Library Used | Select All Support | Batch Processing |
 |--------|---------|---------|--------------|-------------------|------------------|
 | **MP3** | ✅ | ✅ | node-id3 (ID3v1, ID3v2) | ✅ | ✅ Smart filtering |
-| **FLAC** | ✅ | ✅ | metaflac-js2 (Vorbis) | ✅ | ✅ Smart filtering |
+| **FLAC** | ✅ | ✅ | `metaflac` from the FLAC tools (Vorbis comments; only the edited fields change) | ✅ | ✅ Smart filtering |
 | **M4A/AAC** | ✅ | ✅ | mp3tag.js (MP4 containers) | ✅ | ✅ Smart filtering |
 | **OGG** | ✅ | ❌ | music-metadata (read-only) | ✅ | ⚠️ Auto-skipped in batch |
 | **WAV** | ✅ | ❌ | music-metadata (read-only) | ✅ | ⚠️ Auto-skipped in batch |
@@ -213,6 +213,38 @@ const selectableItems = this.currentItems.filter(item =>
 // State-aware button text
 this.selectAllText.textContent = allSelected ? 'Deselect All' : 'Select All';
 ```
+
+## 🎼 MusicBrainz mode (for Lidarr)
+
+Lidarr matches files to albums by the MusicBrainz IDs in their tags. Without them it guesses from names and track
+counts, and a slightly wrong album title can make an album unimportable. The **🎼 MusicBrainz** button (next to Select
+All) looks the album up on MusicBrainz, lets you pick the exact edition, pairs each file with a track, shows a preview,
+then writes the IDs Lidarr reads (release on every track, recording and release-track per file, release group, artist,
+album artist, type, status, country). "Use MusicBrainz names" (on by default) also fixes title, artist, album, track and
+disc numbers and date. Each file is backed up, written and read back; a mismatch restores it.
+
+- It **helps Lidarr, it never talks to it**: add the artist in Lidarr, and the tagged files import onto the edition you
+  picked. Plain tag editing is unchanged.
+- MP3 and FLAC for now; M4A later.
+- MusicBrainz is asked at most once a second, with an identifying User-Agent; no account needed.
+- Design and what Lidarr reads: [`docs/musicbrainz-mode.md`](docs/musicbrainz-mode.md).
+
+```
+GET  /api/mb/search?artist=&album=&tracks=&query=   # candidate editions
+GET  /api/mb/release/<id or musicbrainz.org URL>    # one edition + warnings
+POST /api/mb/match    {files, release}              # propose file → track pairs
+POST /api/mb/preview  {release, mapping, useNames}  # what would change, per file
+POST /api/mb/apply    {release, mapping, useNames}  # write, read back, restore on mismatch
+```
+
+## 🧪 Tests
+
+```bash
+docker build -t mme-test -f test/Dockerfile test/           # node + metaflac
+docker run --rm -v "$PWD:/app" -w /app mme-test sh -c "npm install && npm test"
+```
+
+The FLAC tests need `metaflac` on the PATH (they skip without it). The MusicBrainz tests use saved responses, no network.
 
 ## 📋 Perfect for LIDARR Integration
 
