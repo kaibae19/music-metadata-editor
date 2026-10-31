@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music Metadata Editor</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/musicbrainz.css">
 </head>
 <body>
     <div class="container">
@@ -25,6 +26,10 @@
                         <button class="select-all-btn" id="selectAllBtn" title="Select all visible items">
                             <span>📋</span>
                             <span id="selectAllText">Select All</span>
+                        </button>
+                        <button class="select-all-btn" id="mbLookupBtn" title="Look up the selected files (or this folder's MP3/FLAC files) on MusicBrainz">
+                            <span>🎼</span>
+                            <span>MusicBrainz</span>
                         </button>
                         <div class="selection-info" id="selectionInfo" style="display: none;"></div>
                     </div>
@@ -113,5 +118,6 @@
     </div>
 
     <script src="js/app.js"></script>
+    <script src="js/musicbrainz.js"></script>
 </body>
 </html>

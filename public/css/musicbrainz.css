@@ -1,0 +1,53 @@
+/* MusicBrainz mode dialog (public/js/musicbrainz.js). Uses the theme variables from style.css. */
+.mb-dialog {
+    width: min(860px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
+    padding: 0;
+    border: 1px solid var(--border-primary);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 10px 40px var(--shadow-color);
+}
+.mb-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+.mb-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border-primary); }
+.mb-head h3 { margin: 0; font-size: 1.05em; }
+.mb-x { background: none; border: none; color: var(--text-muted); font-size: 1.1em; cursor: pointer; }
+.mb-body { padding: 16px; overflow: auto; max-height: calc(100vh - 120px); display: flex; flex-direction: column; gap: 12px; }
+.mb-step { font-weight: 600; }
+.mb-muted { color: var(--text-muted); font-size: 0.9em; }
+.mb-busy { color: var(--text-muted); padding: 24px 0; }
+.mb-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mb-form input:nth-child(3) { grid-column: 1 / -1; }
+.mb-form button { grid-column: 1 / -1; justify-self: start; }
+.mb-dialog input[type="text"], .mb-dialog select {
+    width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 6px;
+    border: 1px solid var(--border-primary); background: var(--bg-input); color: var(--text-primary); font: inherit;
+}
+.mb-dialog select.mb-none { border-color: var(--error-text); color: var(--error-text); }
+.mb-results { display: flex; flex-direction: column; gap: 6px; }
+.mb-result {
+    text-align: left; padding: 9px 11px; border-radius: 6px; cursor: pointer; font: inherit;
+    border: 1px solid var(--border-primary); background: var(--bg-tertiary); color: var(--text-primary);
+}
+.mb-result:hover { border-color: var(--text-accent); }
+.mb-result.mb-fit { border-left: 3px solid var(--success-text); }
+.mb-r2 { margin-top: 3px; }
+.mb-link { color: var(--text-accent); font-size: 0.9em; }
+.mb-warn { padding: 8px 10px; border-radius: 6px; background: var(--warning-bg); color: var(--warning-text); font-size: 0.92em; }
+.mb-warn.mb-err { background: var(--error-bg); color: var(--error-text); }
+.mb-table { width: 100%; border-collapse: collapse; font-size: 0.92em; }
+.mb-table th { text-align: left; color: var(--text-muted); font-weight: 500; padding: 4px 6px; }
+.mb-table td { padding: 4px 6px; border-top: 1px solid var(--border-primary); vertical-align: middle; overflow-wrap: anywhere; }
+.mb-diff td:first-child { color: var(--text-muted); white-space: nowrap; }
+.mb-from { color: var(--error-text); text-decoration: line-through; }
+.mb-to { color: var(--success-text); }
+.mb-preview details { border: 1px solid var(--border-primary); border-radius: 6px; padding: 6px 10px; margin-bottom: 6px; }
+.mb-preview summary { cursor: pointer; }
+.mb-check { display: flex; gap: 8px; align-items: center; }
+.mb-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.mb-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.mb-done { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.mb-ok { color: var(--success-text); }
+.mb-bad { color: var(--error-text); }
+@media (max-width: 600px) { .mb-form { grid-template-columns: 1fr; } }

@@ -1058,5 +1058,5 @@ class MetadataEditor {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    new MetadataEditor();
+    window.metadataEditor = new MetadataEditor();   // public/js/musicbrainz.js uses it
 });
