@@ -268,30 +268,43 @@ class MetadataEditor {
         }
     }
 
+    // Built with DOM nodes, never HTML strings: file and folder names can hold any character (" < & ...).
     renderFileList(items) {
-        let html = '';
+        const isRoot = !this.currentPath || this.currentPath === '/music' || this.currentPath === '';
+        const row = (cls, path, type, name, ext) => {
+            const div = document.createElement('div');
+            div.className = 'file-item ' + cls;
+            div.dataset.path = path;
+            div.dataset.type = type;
+            const n = document.createElement('span');
+            n.className = 'file-name';
+            n.textContent = name;
+            div.append(n);
+            if (ext) {
+                const e = document.createElement('span');
+                e.className = 'file-extension';
+                e.textContent = ext;
+                div.append(e);
+            }
+            return div;
+        };
+        const empty = () => {
+            const d = document.createElement('div');
+            d.className = 'loading';
+            d.textContent = 'No audio files found in this directory';
+            return d;
+        };
 
-        if (this.currentPath && this.currentPath !== '/music' && this.currentPath !== '') {
-            html += '<div class="file-item parent" data-path=".." data-type="parent"><span class="file-name">..</span></div>';
-        }
-
-        if (items.length === 0 && (!this.currentPath || this.currentPath === '/music' || this.currentPath === '')) {
-            this.fileList.innerHTML = '<div class="loading">No audio files found in this directory</div>';
+        if (items.length === 0 && isRoot) {
+            this.fileList.replaceChildren(empty());
             return;
         }
 
-        html += items.map(item =>
-            '<div class="file-item ' + item.type + '" data-path="' + item.path + '" data-type="' + item.type + '">' +
-            '<span class="file-name">' + item.name + '</span>' +
-            (item.extension ? '<span class="file-extension">' + item.extension.substring(1) + '</span>' : '') +
-            '</div>'
-        ).join('');
-
-        if (items.length === 0) {
-            html += '<div class="loading">No audio files found in this directory</div>';
-        }
-
-        this.fileList.innerHTML = html;
+        const nodes = [];
+        if (!isRoot) nodes.push(row('parent', '..', 'parent', '..'));
+        for (const item of items) nodes.push(row(item.type, item.path, item.type, item.name, item.extension ? item.extension.substring(1) : ''));
+        if (items.length === 0) nodes.push(empty());
+        this.fileList.replaceChildren(...nodes);
 
         this.fileList.querySelectorAll('.file-item').forEach(item => {
             item.addEventListener('click', (e) => this.handleFileClick(item, e));
@@ -671,20 +684,28 @@ class MetadataEditor {
 
     updateBreadcrumb() {
         if (!this.currentPath || this.currentPath === '/music' || this.currentPath === '') {
-            this.breadcrumb.innerHTML = 'Music Library';
+            this.breadcrumb.textContent = 'Music Library';
         } else {
             const parts = this.currentPath.split('/').filter(p => p && p !== 'music');
 
-            let breadcrumbHtml = '<span class="breadcrumb-part" data-path="" data-type="root">Music Library</span>';
-
+            const part = (path, type, name) => {
+                const span = document.createElement('span');
+                span.className = 'breadcrumb-part';
+                span.dataset.path = path;
+                span.dataset.type = type;
+                span.textContent = name;
+                return span;
+            };
+            const nodes = [part('', 'root', 'Music Library')];
             let currentPath = '';
             for (let i = 0; i < parts.length; i++) {
                 currentPath += (currentPath ? '/' : '') + parts[i];
-                breadcrumbHtml += ' <span class="breadcrumb-separator">></span> ';
-                breadcrumbHtml += '<span class="breadcrumb-part" data-path="' + currentPath + '" data-type="directory">' + parts[i] + '</span>';
+                const sep = document.createElement('span');
+                sep.className = 'breadcrumb-separator';
+                sep.textContent = '>';
+                nodes.push(' ', sep, ' ', part(currentPath, 'directory', parts[i]));
             }
-
-            this.breadcrumb.innerHTML = breadcrumbHtml;
+            this.breadcrumb.replaceChildren(...nodes);
 
             this.breadcrumb.querySelectorAll('.breadcrumb-part').forEach(part => {
                 part.addEventListener('click', () => {
