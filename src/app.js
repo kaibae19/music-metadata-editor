@@ -9,7 +9,7 @@ const MP3Tag = require('mp3tag.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MUSIC_DIR = '/music';
+const MUSIC_DIR = path.resolve(process.env.MUSIC_DIR || '/music');
 
 // Initialize metadata writer
 const MetadataWriter = require('./metadata/writer');
@@ -28,14 +28,20 @@ function isAudioFile(filename) {
     return AUDIO_EXTENSIONS.includes(ext);
 }
 
-// Helper function to get full path
+// Resolve a path from the browser inside MUSIC_DIR. Anything that would land outside it ("../", absolute
+// paths, symlink-free tricks like "/music2") is refused: every route that touches files goes through here.
+class PathError extends Error { constructor(m) { super(m); this.status = 400; } }
 function getFullPath(relativePath) {
-    if (!relativePath || relativePath === '') {
-        return MUSIC_DIR;
-    }
-    // Remove leading slash if present to avoid double slashes
-    const cleanPath = relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
-    return path.join(MUSIC_DIR, cleanPath);
+    const clean = String(relativePath || '').replace(/^\/+/, '');
+    const full = path.resolve(MUSIC_DIR, clean);
+    if (full !== MUSIC_DIR && !full.startsWith(MUSIC_DIR + path.sep)) throw new PathError('Path is outside the music folder');
+    return full;
+}
+
+// A single name for rename: no separators, not "." or "..".
+function checkName(name) {
+    if (typeof name !== 'string' || !name.trim() || /[\/\\]/.test(name) || name === '.' || name === '..') throw new PathError('Invalid name');
+    return name;
 }
 
 // API: Verify metadata was actually written
@@ -82,6 +88,7 @@ app.get('/api/verify/metadata/:path(*)', async (req, res) => {
         }
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Verification error:', error);
         res.status(500).json({ error: 'Verification failed: ' + error.message });
     }
@@ -188,6 +195,7 @@ async function writeMP4MetadataAlternative(filePath, metadata) {
         return { success: true, error: null };
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.log(`❌ Alternative writer failed:`, error.message);
         return { success: false, error: error.message };
     }
@@ -218,6 +226,7 @@ app.post('/api/test/m4a/:path(*)', async (req, res) => {
         }
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Test endpoint error:', error);
         res.status(500).json({ error: 'Test failed: ' + error.message });
     }
@@ -270,6 +279,7 @@ app.get('/api/files', async (req, res) => {
         });
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Error reading directory:', error);
         res.status(500).json({ error: 'Failed to read directory' });
     }
@@ -300,6 +310,7 @@ app.get('/api/metadata/:path(*)', async (req, res) => {
         });
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Error reading metadata:', error);
         res.status(500).json({ error: 'Failed to read metadata' });
     }
@@ -403,6 +414,7 @@ app.post('/api/metadata/batch', async (req, res) => {
         }
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Error updating batch metadata:', error);
         res.status(500).json({ error: 'Failed to update batch metadata' });
     }
@@ -461,6 +473,7 @@ app.post('/api/metadata/:path(*)', async (req, res) => {
         }
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Error updating metadata:', error);
         res.status(500).json({ error: 'Failed to update metadata' });
     }
@@ -469,8 +482,10 @@ app.post('/api/metadata/:path(*)', async (req, res) => {
 // API: Rename file
 app.post('/api/file/rename', async (req, res) => {
     try {
-        const { oldPath, newName } = req.body;
+        const { oldPath } = req.body;
+        const newName = checkName(req.body.newName);
         const fullOldPath = getFullPath(oldPath);
+        if (fullOldPath === MUSIC_DIR) throw new PathError('Invalid path');
         const directory = path.dirname(fullOldPath);
         const extension = path.extname(fullOldPath);
         
@@ -492,6 +507,7 @@ app.post('/api/file/rename', async (req, res) => {
         });
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Error renaming file:', error);
         if (error.code === 'EACCES' || error.code === 'EPERM') {
             res.status(403).json({ error: 'Access denied' });
@@ -504,8 +520,10 @@ app.post('/api/file/rename', async (req, res) => {
 // API: Rename directory
 app.post('/api/directory/rename', async (req, res) => {
     try {
-        const { oldPath, newName } = req.body;
+        const { oldPath } = req.body;
+        const newName = checkName(req.body.newName);
         const fullOldPath = getFullPath(oldPath);
+        if (fullOldPath === MUSIC_DIR) throw new PathError('Invalid path');
         const parentDirectory = path.dirname(fullOldPath);
         const fullNewPath = path.join(parentDirectory, newName);
         
@@ -519,6 +537,7 @@ app.post('/api/directory/rename', async (req, res) => {
         });
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Error renaming directory:', error);
         if (error.code === 'EACCES' || error.code === 'EPERM') {
             res.status(403).json({ error: 'Access denied' });
@@ -544,6 +563,7 @@ app.post('/api/file/delete', async (req, res) => {
         });
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Error deleting file:', error);
         res.status(500).json({ error: 'Failed to delete file' });
     }
@@ -565,6 +585,7 @@ app.post('/api/directory/delete', async (req, res) => {
         });
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Error deleting directory:', error);
         res.status(500).json({ error: 'Failed to delete directory' });
     }
@@ -604,6 +625,7 @@ app.post('/api/batch/delete', async (req, res) => {
         });
         
     } catch (error) {
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
         console.error('Error in batch delete:', error);
         res.status(500).json({ error: 'Failed to delete items' });
     }
@@ -623,8 +645,16 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
+// Path errors anywhere: 400 with the reason (routes that don't catch them themselves)
+app.use((err, req, res, next) => {
+    if (err instanceof PathError) return res.status(400).json({ error: err.message });
+    next(err);
+});
+
+module.exports = { app, getFullPath, MUSIC_DIR };
+
+// Start server (only when run directly; tests require() the app)
+if (require.main === module) app.listen(PORT, '0.0.0.0', () => {
     console.log(`🎵 Music Metadata Editor server running on port ${PORT}`);
     console.log(`📁 Music directory: ${MUSIC_DIR}`);
     console.log(`🌐 Access at: http://localhost:${PORT}`);
