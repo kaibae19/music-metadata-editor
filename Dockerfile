@@ -3,6 +3,9 @@ FROM node:18-alpine
 # Create app directory
 WORKDIR /usr/src/app
 
+# metaflac (FLAC tag edits; src/metadata/flac.js)
+RUN apk add --no-cache flac
+
 # Copy package files
 COPY package*.json ./
 

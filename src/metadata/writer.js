@@ -4,7 +4,7 @@
 const path = require('path');
 const fs = require('fs').promises;
 const NodeID3 = require('node-id3');
-const Metaflac = require('metaflac-js2');
+const flac = require('./flac');
 const MP3Tag = require('mp3tag.js');
 
 class MetadataWriter {
@@ -66,66 +66,17 @@ class MetadataWriter {
     }
 
     /**
-     * Write metadata to FLAC file using metaflac-js2
+     * Write metadata to a FLAC file with metaflac (src/metadata/flac.js): only the named fields change,
+     * every other tag and the pictures stay. A field left undefined is untouched; an empty one is removed.
      */
     async writeFLACMetadata(filePath, metadata) {
+        const fields = { title: 'TITLE', artist: 'ARTIST', album: 'ALBUM', albumartist: 'ALBUMARTIST', year: 'DATE', track: 'TRACKNUMBER', genre: 'GENRE' };
+        const changes = {};
+        for (const [key, name] of Object.entries(fields)) {
+            if (metadata[key] !== undefined) changes[name] = metadata[key] ? String(metadata[key]) : null;
+        }
         try {
-            const flac = new Metaflac(filePath);
-            
-            // Update tags - only set if value is provided and not null
-            if (metadata.title !== undefined) {
-                if (metadata.title) {
-                    flac.setTag(`TITLE=${metadata.title}`);
-                } else {
-                    flac.removeTag('TITLE');
-                }
-            }
-            if (metadata.artist !== undefined) {
-                if (metadata.artist) {
-                    flac.setTag(`ARTIST=${metadata.artist}`);
-                } else {
-                    flac.removeTag('ARTIST');
-                }
-            }
-            if (metadata.album !== undefined) {
-                if (metadata.album) {
-                    flac.setTag(`ALBUM=${metadata.album}`);
-                } else {
-                    flac.removeTag('ALBUM');
-                }
-            }
-            if (metadata.albumartist !== undefined) {
-                if (metadata.albumartist) {
-                    flac.setTag(`ALBUMARTIST=${metadata.albumartist}`);
-                } else {
-                    flac.removeTag('ALBUMARTIST');
-                }
-            }
-            if (metadata.year !== undefined) {
-                if (metadata.year) {
-                    flac.setTag(`DATE=${metadata.year}`);
-                } else {
-                    flac.removeTag('DATE');
-                }
-            }
-            if (metadata.track !== undefined) {
-                if (metadata.track) {
-                    flac.setTag(`TRACKNUMBER=${metadata.track}`);
-                } else {
-                    flac.removeTag('TRACKNUMBER');
-                }
-            }
-            if (metadata.genre !== undefined) {
-                if (metadata.genre) {
-                    flac.setTag(`GENRE=${metadata.genre}`);
-                } else {
-                    flac.removeTag('GENRE');
-                }
-            }
-
-            // Save the changes
-            flac.save();
-
+            await flac.writeTags(filePath, changes);
             return { success: true, error: null };
         } catch (error) {
             return { success: false, error: error.message };
