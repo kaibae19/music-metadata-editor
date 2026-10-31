@@ -645,6 +645,9 @@ app.get('/health', (req, res) => {
     });
 });
 
+// MusicBrainz mode (docs/musicbrainz-mode.md)
+require('./musicbrainz/routes').register(app, { getFullPath, musicDir: MUSIC_DIR });
+
 // Path errors anywhere: 400 with the reason (routes that don't catch them themselves)
 app.use((err, req, res, next) => {
     if (err instanceof PathError) return res.status(400).json({ error: err.message });
