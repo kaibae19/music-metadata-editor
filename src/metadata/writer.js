@@ -67,13 +67,16 @@ class MetadataWriter {
 
     /**
      * Write metadata to a FLAC file with metaflac (src/metadata/flac.js): only the named fields change,
-     * every other tag and the pictures stay. A field left undefined is untouched; an empty one is removed.
+     * every other tag and the pictures stay. undefined or null = untouched (as in the MP3 writer: the form sends null for
+     * an empty number field); '' = removed.
      */
     async writeFLACMetadata(filePath, metadata) {
         const fields = { title: 'TITLE', artist: 'ARTIST', album: 'ALBUM', albumartist: 'ALBUMARTIST', year: 'DATE', track: 'TRACKNUMBER', genre: 'GENRE' };
         const changes = {};
         for (const [key, name] of Object.entries(fields)) {
-            if (metadata[key] !== undefined) changes[name] = metadata[key] ? String(metadata[key]) : null;
+            const v = metadata[key];
+            if (v === undefined || v === null) continue;
+            changes[name] = v === '' ? null : String(v);
         }
         try {
             await flac.writeTags(filePath, changes);

@@ -69,6 +69,17 @@ test('the editor’s plain FLAC save keeps tags it was not asked to change (regr
     assert.deepEqual(t.DESCRIPTION, ['keep me']);
 });
 
+test('plain FLAC save: null (an empty number field in the form) keeps the track number and date; "" removes', opts, async () => {
+    const f = copy();
+    await flac.writeTags(f, { DATE: '2020' });
+    const r = await new MetadataWriter().writeFLACMetadata(f, { title: 'T', track: null, year: null, genre: '' });
+    assert.equal(r.success, true, r.error);
+    const t = await flac.readTags(f);
+    assert.deepEqual(t.TRACKNUMBER, ['1']);
+    assert.deepEqual(t.DATE, ['2020']);
+    assert.equal(t.GENRE, undefined);
+});
+
 test('a missing metaflac is a clear error, not a crash', async () => {
     const save = process.env.METAFLAC;
     const fresh = require.resolve('../src/metadata/flac');

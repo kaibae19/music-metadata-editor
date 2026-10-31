@@ -494,8 +494,8 @@ class MetadataEditor {
         this.albumInput.value = data.common.album || '';
         this.albumartistInput.value = data.common.albumartist || '';
         this.yearInput.value = data.common.year || '';
-        this.trackInput.value = data.common.track || '';
-        this.genreInput.value = data.common.genre || '';
+        this.trackInput.value = data.common.track?.no ?? '';   // music-metadata gives {no, of}
+        this.genreInput.value = Array.isArray(data.common.genre) ? data.common.genre.join(', ') : (data.common.genre || '');
 
         this.titleInput.disabled = false;
         this.trackInput.disabled = false;
