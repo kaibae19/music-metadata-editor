@@ -1,10 +1,11 @@
 // File: src/app.js
-// Music Metadata Editor Backend - Fixed Batch Metadata
+// Music Metadata Editor Backend - With Verification Endpoints
 
 const express = require('express');
 const path = require('path');
 const fs = require('fs').promises;
 const { parseFile } = require('music-metadata');
+const MP3Tag = require('mp3tag.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,6 +38,191 @@ function getFullPath(relativePath) {
     return path.join(MUSIC_DIR, cleanPath);
 }
 
+// API: Verify metadata was actually written
+app.get('/api/verify/metadata/:path(*)', async (req, res) => {
+    try {
+        const relativePath = req.params.path;
+        const fullPath = getFullPath(relativePath);
+        
+        console.log('=== METADATA VERIFICATION ===');
+        console.log('Verifying metadata for:', fullPath);
+        
+        // Read with music-metadata library (what we use for reading)
+        const metadata = await parseFile(fullPath);
+        
+        console.log('Raw metadata from music-metadata library:');
+        console.log('Common tags:', JSON.stringify(metadata.common, null, 2));
+        console.log('Format info:', JSON.stringify(metadata.format, null, 2));
+        
+        // Try reading with MP3Tag library directly
+        try {
+            const buffer = await fs.readFile(fullPath);
+            const mp3tag = new MP3Tag(buffer, false);
+            mp3tag.read();
+            
+            console.log('Tags from MP3Tag library:');
+            console.log(JSON.stringify(mp3tag.tags, null, 2));
+            
+            res.json({
+                success: true,
+                musicMetadata: metadata.common,
+                mp3tagData: mp3tag.tags,
+                format: metadata.format,
+                fileSize: buffer.length
+            });
+            
+        } catch (mp3tagError) {
+            console.log('MP3Tag read error:', mp3tagError.message);
+            res.json({
+                success: true,
+                musicMetadata: metadata.common,
+                mp3tagError: mp3tagError.message,
+                format: metadata.format
+            });
+        }
+        
+    } catch (error) {
+        console.error('Verification error:', error);
+        res.status(500).json({ error: 'Verification failed: ' + error.message });
+    }
+});
+
+// Alternative M4A writer using a different approach
+async function writeMP4MetadataAlternative(filePath, metadata) {
+    console.log(`\n=== ALTERNATIVE M4A WRITER ===`);
+    console.log(`File: ${path.basename(filePath)}`);
+    
+    try {
+        // Read the file
+        const buffer = await fs.readFile(filePath);
+        console.log(`File read: ${buffer.length} bytes`);
+        
+        // Check if this is actually an MP4/M4A file by looking for the ftyp box
+        const ftypIndex = buffer.indexOf('ftyp');
+        console.log(`ftyp box found at index: ${ftypIndex}`);
+        
+        if (ftypIndex === -1) {
+            console.log(`❌ This doesn't appear to be a valid MP4/M4A file`);
+            return { success: false, error: 'File does not appear to be a valid M4A file (no ftyp box found)' };
+        }
+        
+        // Try creating MP3Tag with different options
+        let mp3tag;
+        try {
+            // Method 1: Standard approach
+            mp3tag = new MP3Tag(buffer);
+            mp3tag.read();
+            console.log(`✅ Standard MP3Tag approach worked`);
+        } catch (error1) {
+            console.log(`❌ Standard approach failed: ${error1.message}`);
+            try {
+                // Method 2: Force MP4 format
+                mp3tag = new MP3Tag(buffer, false);
+                mp3tag.read();
+                console.log(`✅ Non-verbose approach worked`);
+            } catch (error2) {
+                console.log(`❌ Non-verbose approach failed: ${error2.message}`);
+                return { success: false, error: `Both MP3Tag approaches failed: ${error1.message}` };
+            }
+        }
+        
+        console.log(`Current tags:`, mp3tag.tags);
+        
+        // Prepare the new tags - be very explicit about what we're setting
+        const newTags = {};
+        
+        // Only set non-empty values
+        if (metadata.title && metadata.title.trim() !== '') {
+            newTags.title = metadata.title.trim();
+        }
+        if (metadata.artist && metadata.artist.trim() !== '') {
+            newTags.artist = metadata.artist.trim();
+        }
+        if (metadata.album && metadata.album.trim() !== '') {
+            newTags.album = metadata.album.trim();
+        }
+        if (metadata.albumartist && metadata.albumartist.trim() !== '') {
+            newTags.albumartist = metadata.albumartist.trim();
+        }
+        if (metadata.year && metadata.year !== null) {
+            newTags.year = metadata.year.toString();
+        }
+        if (metadata.track && metadata.track !== null) {
+            newTags.track = metadata.track.toString();
+        }
+        if (metadata.genre && metadata.genre.trim() !== '') {
+            newTags.genre = metadata.genre.trim();
+        }
+        
+        console.log(`New tags to set:`, newTags);
+        
+        if (Object.keys(newTags).length === 0) {
+            console.log(`ℹ️ No valid metadata provided`);
+            return { success: true, error: null };
+        }
+        
+        // Merge with existing tags (preserve what we're not changing)
+        const mergedTags = { ...mp3tag.tags, ...newTags };
+        console.log(`Merged tags:`, mergedTags);
+        
+        // Set the tags
+        mp3tag.tags = mergedTags;
+        
+        // Save to buffer
+        mp3tag.save();
+        console.log(`✅ Tags saved to buffer`);
+        
+        // Write the file with a different approach - write to temp file first
+        const tempPath = filePath + '.temp.' + Date.now();
+        await fs.writeFile(tempPath, Buffer.from(mp3tag.buffer));
+        console.log(`✅ Written to temp file: ${path.basename(tempPath)}`);
+        
+        // Verify the temp file is valid
+        const tempBuffer = await fs.readFile(tempPath);
+        console.log(`✅ Temp file verification: ${tempBuffer.length} bytes`);
+        
+        // Replace the original file
+        await fs.rename(tempPath, filePath);
+        console.log(`✅ Original file replaced`);
+        
+        return { success: true, error: null };
+        
+    } catch (error) {
+        console.log(`❌ Alternative writer failed:`, error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+// API: Test alternative M4A writer
+app.post('/api/test/m4a/:path(*)', async (req, res) => {
+    try {
+        const relativePath = req.params.path;
+        const { metadata } = req.body;
+        const fullPath = getFullPath(relativePath);
+        
+        console.log('=== TESTING ALTERNATIVE M4A WRITER ===');
+        console.log('File:', fullPath);
+        console.log('Metadata:', metadata);
+        
+        const result = await writeMP4MetadataAlternative(fullPath, metadata);
+        
+        if (result.success) {
+            res.json({ 
+                success: true, 
+                message: 'Alternative M4A writer succeeded' 
+            });
+        } else {
+            res.status(500).json({ 
+                error: result.error 
+            });
+        }
+        
+    } catch (error) {
+        console.error('Test endpoint error:', error);
+        res.status(500).json({ error: 'Test failed: ' + error.message });
+    }
+});
+
 // API: Get files and directories
 app.get('/api/files', async (req, res) => {
     try {
@@ -60,9 +246,10 @@ app.get('/api/files', async (req, res) => {
                     type: 'directory'
                 });
             } else if (item.isFile() && isAudioFile(item.name)) {
+                // FIXED: Use the original filename, not parsed name + extension
                 result.push({
-                    name: path.parse(item.name).name,
-                    path: relativePath,
+                    name: path.parse(item.name).name, // Display name without extension
+                    path: relativePath, // Use original relative path
                     type: 'file',
                     extension: path.extname(item.name)
                 });
@@ -95,6 +282,14 @@ app.get('/api/metadata/:path(*)', async (req, res) => {
         const fullPath = getFullPath(relativePath);
         
         console.log('Reading metadata for:', fullPath);
+        
+        // Check if file exists first
+        try {
+            await fs.access(fullPath, fs.constants.F_OK);
+        } catch (error) {
+            console.error('File not found:', fullPath);
+            return res.status(404).json({ error: 'File not found' });
+        }
         
         const metadata = await parseFile(fullPath);
         
@@ -131,6 +326,8 @@ app.post('/api/metadata/batch', async (req, res) => {
         for (const relativePath of filePaths) {
             try {
                 const fullPath = getFullPath(relativePath);
+                
+                console.log(`Validating file: ${relativePath} -> ${fullPath}`);
                 
                 // Check if file exists
                 await fs.access(fullPath, fs.constants.F_OK);
@@ -222,6 +419,14 @@ app.post('/api/metadata/:path(*)', async (req, res) => {
         console.log('Update metadata request for:', fullPath);
         console.log('New metadata:', metadata);
         
+        // Verify file exists
+        try {
+            await fs.access(fullPath, fs.constants.F_OK);
+        } catch (error) {
+            console.error('File not found:', fullPath);
+            return res.status(404).json({ error: 'File not found' });
+        }
+        
         // Check if format is supported
         if (!metadataWriter.isSupported(fullPath)) {
             const ext = path.extname(fullPath).toLowerCase();
@@ -268,7 +473,14 @@ app.post('/api/file/rename', async (req, res) => {
         const fullOldPath = getFullPath(oldPath);
         const directory = path.dirname(fullOldPath);
         const extension = path.extname(fullOldPath);
-        const fullNewPath = path.join(directory, newName + extension);
+        
+        // FIXED: Don't add extension if newName already has it
+        let finalNewName = newName;
+        if (!newName.endsWith(extension)) {
+            finalNewName = newName + extension;
+        }
+        
+        const fullNewPath = path.join(directory, finalNewName);
         
         console.log('Renaming file from:', fullOldPath, 'to:', fullNewPath);
         
@@ -416,4 +628,7 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🎵 Music Metadata Editor server running on port ${PORT}`);
     console.log(`📁 Music directory: ${MUSIC_DIR}`);
     console.log(`🌐 Access at: http://localhost:${PORT}`);
+    console.log('Debug endpoints available:');
+    console.log('- GET /api/verify/metadata/<path> - Check if metadata was actually written');
+    console.log('- POST /api/test/m4a/<path> - Test alternative M4A writer');
 });
