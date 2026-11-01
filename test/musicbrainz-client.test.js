@@ -1,4 +1,4 @@
-// Run: node --test test/   (no network: fetch is faked with the saved fixtures)
+// Run: npm test   (no network: fetch is faked with the saved fixtures)
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
