@@ -46,9 +46,24 @@
             return (this.editor.currentItems || []).filter(i => i.type === 'file' && isOk(i.path)).map(i => i.path);
         }
 
+        /** Why there's nothing to look up: other audio formats here (M4A …) are named, not blamed on the selection. */
+        noFilesMessage() {
+            const sel = [...this.editor.selectedItems].filter(k => k.startsWith('file:')).map(k => k.slice(5));
+            const pool = sel.length ? sel : (this.editor.currentItems || []).filter(i => i.type === 'file').map(i => i.path);
+            const other = {};
+            for (const p of pool) {
+                const ext = (p.match(/\.[^./]+$/) || [''])[0].toLowerCase();
+                if (ext && !SUPPORTED.includes(ext)) other[ext] = (other[ext] || 0) + 1;
+            }
+            const list = Object.entries(other).map(([ext, n]) => `${n} ${ext.slice(1).toUpperCase()} file${n === 1 ? '' : 's'}`);
+            if (list.length) return `MusicBrainz mode works on ${SUPPORTED.map(x => x.slice(1).toUpperCase()).join(' and ')}; ` +
+                `${sel.length ? 'the selection has' : 'this folder has'} ${list.join(', ')} (not supported here yet)`;
+            return 'MusicBrainz: no MP3 or FLAC files here (select some, or open an album folder)';
+        }
+
         async open() {
             this.files = this.targetFiles();
-            if (!this.files.length) { this.editor.setStatus('MusicBrainz: no MP3 or FLAC files here (select some, or open an album folder)', 'error'); return; }
+            if (!this.files.length) { this.editor.setStatus(this.noFilesMessage(), 'error'); return; }
             this.useNames = true;
             this.dialog = el('dialog', { class: 'mb-dialog', onclose: () => this.dialog.remove() });
             this.body = el('div', { class: 'mb-body' });

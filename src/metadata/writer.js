@@ -9,7 +9,10 @@ const MP3Tag = require('mp3tag.js');
 
 class MetadataWriter {
     constructor() {
-        this.supportedFormats = ['.mp3', '.flac', '.m4a', '.aac'];
+        // .m4a/.aac are NOT here: the MP4 path below went through mp3tag.js (an MP3/ID3 library), returned success and
+        // left the file byte for byte unchanged (checked 2026-11-11 on a real iTunes-tagged M4A). Until a real MP4
+        // writer exists, saying "unsupported" is honest; reading M4A tags still works.
+        this.supportedFormats = ['.mp3', '.flac'];
     }
 
     /**

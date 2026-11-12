@@ -30,7 +30,7 @@ A **polished, professional** file management and metadata editing solution with 
 
 ### **🎯 Core Features**
 - 🗂️ **Intuitive file browsing** with smart breadcrumb navigation
-- 🎵 **Real metadata editing** for MP3, FLAC, M4A files (actually writes changes!)
+- 🎵 **Real metadata editing** for MP3 and FLAC files (actually writes changes!); M4A is read-only for now
 - 🖱️ **Advanced multi-select** with Ctrl+click functionality
 - 📝 **Enhanced batch metadata operations** across multiple files with smart filtering
 - 🔄 **Complete file management** (rename, delete, organize)
@@ -149,7 +149,7 @@ music-metadata-editor/
 |--------|---------|---------|--------------|-------------------|------------------|
 | **MP3** | ✅ | ✅ | node-id3 (ID3v1, ID3v2) | ✅ | ✅ Smart filtering |
 | **FLAC** | ✅ | ✅ | `metaflac` from the FLAC tools (Vorbis comments; only the edited fields change) | ✅ | ✅ Smart filtering |
-| **M4A/AAC** | ✅ | ✅ | mp3tag.js (MP4 containers) | ✅ | ✅ Smart filtering |
+| **M4A/AAC** | ✅ | ❌ (not yet: saving is refused) | — | — | skipped with a reason |
 | **OGG** | ✅ | ❌ | music-metadata (read-only) | ✅ | ⚠️ Auto-skipped in batch |
 | **WAV** | ✅ | ❌ | music-metadata (read-only) | ✅ | ⚠️ Auto-skipped in batch |
 
