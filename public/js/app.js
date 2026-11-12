@@ -80,11 +80,13 @@ class MetadataEditor {
 
         this.initializeElements();
         this.setupEventListeners();
+        this.setupFilter();
         this.loadFiles();
     }
 
     initializeElements() {
         this.fileList = document.getElementById('fileList');
+        this.fileFilter = document.getElementById('fileFilter');
         this.breadcrumb = document.getElementById('breadcrumb');
         this.selectionInfo = document.getElementById('selectionInfo');
         this.fileInfo = document.getElementById('fileInfo');
@@ -149,10 +151,61 @@ class MetadataEditor {
         });
     }
 
+    // Filter: case- and accent-insensitive match on the name, current folder only (2026-11-11).
+    normalize(s) {
+        return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    }
+
+    filterQuery() {
+        return this.fileFilter ? this.normalize(this.fileFilter.value.trim()) : '';
+    }
+
+    matchesFilter(item) {
+        const q = this.filterQuery();
+        return !q || item.type === 'parent' || this.normalize(item.name).includes(q);
+    }
+
+    applyFilter() {
+        const q = this.filterQuery();
+        let shown = 0;
+        this.fileList.querySelectorAll('.file-item').forEach(el => {
+            const item = { type: el.dataset.type, name: el.querySelector('.file-name')?.textContent ?? '' };
+            const show = this.matchesFilter(item);
+            el.style.display = show ? '' : 'none';
+            if (show && item.type !== 'parent') shown++;
+        });
+        let none = this.fileList.querySelector('.filter-empty');
+        if (q && shown === 0) {
+            if (!none) {
+                none = document.createElement('div');
+                none.className = 'loading filter-empty';
+                this.fileList.append(none);
+            }
+            none.textContent = 'Nothing in this folder matches "' + this.fileFilter.value.trim() + '"';
+        } else if (none) {
+            none.remove();
+        }
+        this.updateSelectAllButton();
+        if (q) this.setStatus(`${shown} of ${this.currentItems.length} items match`, 'info');
+    }
+
+    setupFilter() {
+        if (!this.fileFilter) return;
+        this.fileFilter.addEventListener('input', () => this.applyFilter());
+        this.fileFilter.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { this.fileFilter.value = ''; this.applyFilter(); this.fileFilter.blur(); }
+        });
+        document.addEventListener('keydown', e => {
+            const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+            if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); this.fileFilter.focus(); }
+        });
+    }
+
     handleSelectAll() {
         const selectableItems = this.currentItems.filter(item => 
             item.type !== 'parent' && 
-            (item.type === 'directory' || item.type === 'file')
+            (item.type === 'directory' || item.type === 'file') &&
+            this.matchesFilter(item)
         );
 
         if (selectableItems.length === 0) {
@@ -206,7 +259,8 @@ class MetadataEditor {
 
         const selectableItems = this.currentItems.filter(item => 
             item.type !== 'parent' && 
-            (item.type === 'directory' || item.type === 'file')
+            (item.type === 'directory' || item.type === 'file') &&
+            this.matchesFilter(item)
         );
 
         if (selectableItems.length === 0) {
@@ -245,6 +299,7 @@ class MetadataEditor {
                 throw new Error(data.error || 'Failed to load files');
             }
 
+            if (this.fileFilter && data.currentPath !== this.currentPath) this.fileFilter.value = '';  // new folder, new filter
             this.currentPath = data.currentPath;
             this.currentItems = data.items; // Store current items
             this.renderFileList(data.items);
@@ -310,6 +365,7 @@ class MetadataEditor {
             item.addEventListener('click', (e) => this.handleFileClick(item, e));
             item.addEventListener('contextmenu', (e) => this.handleContextMenu(item, e));
         });
+        this.applyFilter();  // keep a typed filter across re-renders (e.g. after a save)
     }
 
     handleFileClick(element, event) {

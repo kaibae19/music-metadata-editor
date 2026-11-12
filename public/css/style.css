@@ -625,3 +625,17 @@ button:disabled {
         gap: 8px;
     }
 }
+
+/* Folder filter (2026-11-11) */
+.file-filter {
+    width: 100%;
+    margin-top: 8px;
+    padding: 7px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-secondary);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.9em;
+    box-sizing: border-box;
+}
+.file-filter:focus { outline: none; border-color: var(--text-accent); }
