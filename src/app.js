@@ -268,7 +268,7 @@ app.get('/api/files', async (req, res) => {
                     path: relativePath,
                     type: 'directory'
                 });
-            } else if (item.isFile() && isAudioFile(item.name)) {
+            } else if (item.isFile() && isAudioFile(item.name) && !item.name.startsWith('.upload-')) {   // skip uploads in progress
                 // FIXED: Use the original filename, not parsed name + extension
                 result.push({
                     name: path.parse(item.name).name, // Display name without extension
@@ -657,6 +657,88 @@ app.get('/api/import', async (req, res) => {
     res.json({ enabled: true, path: IMPORT_DIR.rel, exists: !!stat && stat.isDirectory() });
 });
 
+// Upload into the import folder (docs/upload-and-import.md, step 2). Off unless ENABLE_UPLOAD=true.
+// One file per request, the raw bytes as the body: POST /api/upload?name=<original file name>. Guardrails: audio
+// extension + the file must parse as audio, size limit (UPLOAD_MAX_MB), base name only, never overwrite, written to
+// a temp file first (no half files).
+const UPLOAD_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.ENABLE_UPLOAD || ''));
+const UPLOAD_MAX_BYTES = Math.round((parseFloat(process.env.UPLOAD_MAX_MB) || 500) * 1024 * 1024);
+const fsSync = require('fs');
+const crypto = require('crypto');
+
+function uploadName(raw) {
+    // base name only: drop any folder part (/ or \), control characters and leading dots; trim; cap the length
+    let name = String(raw || '').split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/^\.+/, '');
+    if (name.length > 200) name = name.slice(0, 200 - path.extname(name).length) + path.extname(name);
+    return name;
+}
+
+async function freeName(dir, name) {
+    const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
+    for (let n = 1; n < 1000; n++) {
+        const candidate = n === 1 ? name : `${base} (${n})${ext}`;
+        try { await fs.access(path.join(dir, candidate)); } catch { return candidate; }
+    }
+    throw new Error('Too many files with that name');
+}
+
+app.get('/api/upload', (req, res) => {
+    res.json({ enabled: UPLOAD_ENABLED && !!IMPORT_DIR, maxBytes: UPLOAD_MAX_BYTES, extensions: AUDIO_EXTENSIONS,
+        importPath: IMPORT_DIR ? IMPORT_DIR.rel : null });
+});
+
+app.post('/api/upload', async (req, res) => {
+    if (!UPLOAD_ENABLED) return res.status(403).json({ error: 'Upload is off (set ENABLE_UPLOAD=true)' });
+    if (!IMPORT_DIR) return res.status(403).json({ error: 'No import folder (IMPORT_DIR)' });
+    const name = uploadName(req.query.name);
+    if (!name) return res.status(400).json({ error: 'Missing file name' });
+    if (!isAudioFile(name)) return res.status(415).json({ error: `Not an audio file type: ${path.extname(name) || '(none)'}` });
+    const declared = Number(req.headers['content-length']);
+    if (declared > UPLOAD_MAX_BYTES) return res.status(413).json({ error: `File is larger than ${UPLOAD_MAX_BYTES} bytes` });
+
+    let tmp;
+    try {
+        await fs.mkdir(IMPORT_DIR.full, { recursive: true });
+        tmp = path.join(IMPORT_DIR.full, `.upload-${crypto.randomBytes(6).toString('hex')}${path.extname(name).toLowerCase()}`);
+        getFullPath(path.relative(MUSIC_DIR, tmp));            // stays inside MUSIC_DIR (belt and braces)
+        let size = 0, tooBig = false;
+        await new Promise((resolve, reject) => {
+            const out = fsSync.createWriteStream(tmp, { flags: 'wx', mode: 0o664 });
+            req.on('data', chunk => {
+                size += chunk.length;
+                if (size > UPLOAD_MAX_BYTES && !tooBig) { tooBig = true; req.unpipe(out); out.destroy(); req.resume(); resolve(); }
+            });
+            req.on('error', reject);
+            out.on('error', reject);
+            out.on('finish', resolve);
+            req.pipe(out);
+        });
+        if (tooBig) { await fs.rm(tmp, { force: true }); return res.status(413).json({ error: `File is larger than ${UPLOAD_MAX_BYTES} bytes` }); }
+        if (size === 0) { await fs.rm(tmp, { force: true }); return res.status(400).json({ error: 'Empty file' }); }
+        let format;
+        try { format = (await parseFile(tmp, { duration: false, skipCovers: true })).format; } catch { format = null; }
+        if (!format || !format.container) { await fs.rm(tmp, { force: true }); return res.status(415).json({ error: 'Not a readable audio file' }); }
+        // never overwrite: pick a free name, then link (fails if it appeared meanwhile) or rename as a fallback
+        let final;
+        for (let attempt = 0; attempt < 5; attempt++) {
+            final = await freeName(IMPORT_DIR.full, name);
+            try { await fs.link(tmp, path.join(IMPORT_DIR.full, final)); await fs.rm(tmp, { force: true }); break; }
+            catch (e) {
+                if (e.code === 'EEXIST') { final = null; continue; }
+                await fs.rename(tmp, path.join(IMPORT_DIR.full, final)); break;   // no hard links (some filesystems)
+            }
+        }
+        if (!final) throw new Error('Could not find a free file name');
+        await fs.chmod(path.join(IMPORT_DIR.full, final), 0o664).catch(() => {});
+        res.json({ saved: { name: final, path: `${IMPORT_DIR.rel}/${final}`, size, container: format.container } });
+    } catch (error) {
+        if (tmp) await fs.rm(tmp, { force: true }).catch(() => {});
+        if (error instanceof PathError) return res.status(400).json({ error: error.message });
+        console.error('Upload failed:', error);
+        res.status(500).json({ error: 'Upload failed' });
+    }
+});
+
 // Health check
 app.get('/health', (req, res) => {
     res.json({ 
@@ -675,7 +757,7 @@ app.use((err, req, res, next) => {
     next(err);
 });
 
-module.exports = { app, getFullPath, MUSIC_DIR, IMPORT_DIR };
+module.exports = { app, getFullPath, MUSIC_DIR, IMPORT_DIR, uploadName };
 
 // Start server (only when run directly; tests require() the app)
 if (require.main === module) app.listen(PORT, '0.0.0.0', () => {

@@ -1,6 +1,6 @@
 # Upload and import folder (design)
 
-Status: **design, not built** (2026-11-11). The folder filter it mentions is built (2026-11-11).
+Status: **steps 1–2 built** (2026-11-11): the folder filter, the 📥 Import shortcut (`IMPORT_DIR`) and `POST /api/upload`. Steps 3–5 (upload UI, Lidarr hand-off, README) are design.
 
 ## Why
 
@@ -34,11 +34,16 @@ way of putting files there (a share, `scp`, a download client) keeps working. Bo
 - **UI:** with `ENABLE_UPLOAD=true`, an "Upload" button and a drop area over the file list. Drop files (or pick them);
   a progress line per file; when done, the view opens the import folder with the new files selected, and the status
   bar offers "Look up on MusicBrainz".
-- **Endpoint:** `POST /api/upload` (multipart, one or more files) → `{ saved: [{ name, path }], rejected: [{ name, why }] }`.
+- **Endpoint (built 2026-11-11):** one file per request, the raw bytes as the body (no multipart parser, no new
+  dependency): `POST /api/upload?name=<original file name>` → `200 { saved: { name, path, size, container } }`, or
+  `400` (no name / empty), `403` (upload off / no import folder), `413` (too big), `415` (not an audio type, or the
+  bytes don't parse as audio). `GET /api/upload` → `{ enabled, maxBytes, extensions, importPath }` for the UI.
+  The UI sends several files as several requests.
 - **Guardrails** (the editor has no login; anyone who can reach it can upload while the setting is on):
-  - only audio extensions the editor already reads/writes (MP3, FLAC, M4A/MP4, plus whatever `supportedFormats` lists);
-    checked by extension *and* by parsing the file's header (`music-metadata`), so a renamed non-audio file is rejected;
-  - `UPLOAD_MAX_MB` per file; streamed to a temp file inside `IMPORT_DIR`, then renamed into place (no half files);
+  - only the audio extensions the editor lists (`.mp3 .flac .m4a .aac .ogg .wav`), checked by extension *and* by
+    parsing the file (`music-metadata`), so a renamed non-audio file is rejected;
+  - `UPLOAD_MAX_MB` per file; streamed to a hidden temp file (`.upload-…`, not shown in the listing) inside
+    `IMPORT_DIR`, then linked/renamed into place (no half files; nothing left behind on any refusal);
   - the stored name is the original's base name only, with path separators and control characters removed; it goes
     through the same `getFullPath()` check as every other path (must stay inside `MUSIC_DIR`);
   - **never overwrite:** an existing name gets ` (2)`, ` (3)`, …;
