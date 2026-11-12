@@ -38,6 +38,20 @@ function getFullPath(relativePath) {
     return full;
 }
 
+// Import folder (docs/upload-and-import.md, step 1): IMPORT_DIR is relative to MUSIC_DIR (default "import"), so it is
+// always inside the music folder. One that would land outside it (or on the music folder itself) disables the shortcut.
+const IMPORT_DIR = (() => {
+    const rel = String(process.env.IMPORT_DIR ?? 'import').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!rel) return null;
+    try {
+        const full = getFullPath(rel);
+        return full === MUSIC_DIR ? null : { rel: path.relative(MUSIC_DIR, full).split(path.sep).join('/'), full };
+    } catch {
+        console.warn(`IMPORT_DIR "${process.env.IMPORT_DIR}" is outside the music folder: import shortcut off`);
+        return null;
+    }
+})();
+
 // A single name for rename: no separators, not "." or "..".
 function checkName(name) {
     if (typeof name !== 'string' || !name.trim() || /[\/\\]/.test(name) || name === '.' || name === '..') throw new PathError('Invalid name');
@@ -636,6 +650,13 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
+// Import folder: where it is and whether it exists yet (the UI's "📥 Import" shortcut)
+app.get('/api/import', async (req, res) => {
+    if (!IMPORT_DIR) return res.json({ enabled: false });
+    const stat = await fs.stat(IMPORT_DIR.full).catch(() => null);
+    res.json({ enabled: true, path: IMPORT_DIR.rel, exists: !!stat && stat.isDirectory() });
+});
+
 // Health check
 app.get('/health', (req, res) => {
     res.json({ 
@@ -654,7 +675,7 @@ app.use((err, req, res, next) => {
     next(err);
 });
 
-module.exports = { app, getFullPath, MUSIC_DIR };
+module.exports = { app, getFullPath, MUSIC_DIR, IMPORT_DIR };
 
 // Start server (only when run directly; tests require() the app)
 if (require.main === module) app.listen(PORT, '0.0.0.0', () => {

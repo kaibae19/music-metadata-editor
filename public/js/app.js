@@ -81,12 +81,14 @@ class MetadataEditor {
         this.initializeElements();
         this.setupEventListeners();
         this.setupFilter();
+        this.setupImport();
         this.loadFiles();
     }
 
     initializeElements() {
         this.fileList = document.getElementById('fileList');
         this.fileFilter = document.getElementById('fileFilter');
+        this.importBtn = document.getElementById('importBtn');
         this.breadcrumb = document.getElementById('breadcrumb');
         this.selectionInfo = document.getElementById('selectionInfo');
         this.fileInfo = document.getElementById('fileInfo');
@@ -199,6 +201,32 @@ class MetadataEditor {
             const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
             if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); this.fileFilter.focus(); }
         });
+    }
+
+    // "📥 Import": jump to the import folder (IMPORT_DIR on the server; docs/upload-and-import.md). Hidden when it's off.
+    async setupImport() {
+        if (!this.importBtn) return;
+        try {
+            const r = await fetch('/api/import');
+            this.importInfo = r.ok ? await r.json() : { enabled: false };
+        } catch { this.importInfo = { enabled: false }; }
+        if (!this.importInfo.enabled) return;
+        this.importBtn.style.display = 'flex';
+        this.importBtn.title = 'Open the import folder (' + this.importInfo.path + ')';
+        this.importBtn.addEventListener('click', () => this.openImport());
+    }
+
+    async openImport() {
+        try {
+            const r = await fetch('/api/import');
+            this.importInfo = await r.json();
+        } catch { /* keep the last answer */ }
+        if (!this.importInfo?.enabled) return;
+        if (!this.importInfo.exists) {
+            this.setStatus('No import folder yet: create "' + this.importInfo.path + '" in your music folder (or set IMPORT_DIR)', 'warning');
+            return;
+        }
+        this.loadFiles(this.importInfo.path);
     }
 
     handleSelectAll() {
