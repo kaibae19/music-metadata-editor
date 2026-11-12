@@ -1,6 +1,6 @@
 # Upload and import folder (design)
 
-Status: **steps 1–2 built** (2026-11-11): the folder filter, the 📥 Import shortcut (`IMPORT_DIR`) and `POST /api/upload`. Steps 3–5 (upload UI, Lidarr hand-off, README) are design.
+Status: **steps 1–2 built** (2026-11-11): the folder filter, the 📥 Import shortcut (`IMPORT_DIR`) and `POST /api/upload` (off by default). The README documents these settings (its Settings section). Steps 3–4 (upload UI, Lidarr hand-off) are design; the `LIDARR_*` settings below don't exist yet.
 
 ## Why
 
@@ -22,7 +22,7 @@ way of putting files there (a share, `scp`, a download client) keeps working. Bo
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `IMPORT_DIR` | `import` | Import folder, **relative to `MUSIC_DIR`** (so it's always inside the music folder and the editor can browse it). Created on first upload. |
+| `IMPORT_DIR` | `import` | Import folder, **relative to `MUSIC_DIR`** (so it's always inside the music folder and the editor can browse it). Created on first upload. Empty = off (no 📥 Import button). |
 | `ENABLE_UPLOAD` | `false` | Show the upload area and accept `POST /api/upload`. |
 | `UPLOAD_MAX_MB` | `500` | Per-file size limit. |
 | `LIDARR_URL` | unset | e.g. `http://lidarr:8686`. Unset = the editor never talks to Lidarr. |
@@ -86,7 +86,7 @@ it" still holds; this is an opt-in convenience).
 2. Server: `POST /api/upload` with the guardrails above + tests (path tricks, overwrite, non-audio, size).
 3. UI: upload button + drop area, progress, open the import folder with the new files selected.
 4. Optional Lidarr hand-off (`LIDARR_*`), with a "test connection" in the settings or status bar.
-5. README: the settings table, the Lidarr compose snippet, the security note.
+5. README: the settings table and the security note (done 2026-11-12); the Lidarr compose snippet when step 4 is built.
 
 ## Open
 

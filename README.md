@@ -104,6 +104,8 @@ chmod +x deploy.sh
 - **Multi-select mastery** - Ctrl+click for precise selection control plus Select All option
 - **Context-aware menus** - different options based on what's selected
 - **Smart behavior** - won't navigate away when you have files selected
+- **Folder filter** - type in the filter box above the file list to narrow the current folder by name; `/` jumps to it, Esc clears it
+- **📥 Import shortcut** - a button next to the breadcrumb opens the import folder (`IMPORT_DIR`, default `import` inside your music folder), where new files land before you tag them. Hidden when `IMPORT_DIR` is turned off; if the folder doesn't exist yet, the status bar says so
 
 ### **🎵 Enhanced Metadata Editing Experience**
 - **Single file editing** - all fields available with live validation
@@ -168,6 +170,10 @@ POST /api/directory/rename        # Rename directories safely
 POST /api/file/delete             # Delete files with confirmations
 POST /api/directory/delete        # Delete directories with warnings
 POST /api/batch/delete            # Batch delete with comprehensive reporting + Select All integration
+GET  /api/import                  # Import folder: { enabled, path, exists }
+GET  /api/upload                  # Upload settings: { enabled, maxBytes, extensions, importPath }
+POST /api/upload?name=<file name> # Upload one file (raw bytes as the body) into the import folder; off unless ENABLE_UPLOAD=true
+                                  #   200 { saved } · 400 no name/empty · 403 off · 413 too big · 415 not audio
 ```
 
 ### **🆕 Enhanced Batch Metadata Endpoint**
@@ -281,6 +287,29 @@ Designed specifically for music library automation with enhanced bulk operations
 - ✅ **Permission handling** with graceful read-only mode
 - ✅ **Docker deployment** ready for production
 
+## ⚙️ Settings
+
+All settings are environment variables. Everything is optional except the music folder mount.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `MUSIC_DIR` | `/music` | The music folder inside the container. Every file route stays inside it. |
+| `PORT` | `3000` | The port the web interface listens on. |
+| `IMPORT_DIR` | `import` | The import folder, **relative to `MUSIC_DIR`**, so it is always inside the music folder. The 📥 Import button opens it. Set it to an empty value to hide the button; a path that would land outside the music folder is refused (the button stays hidden and the log says why). |
+| `ENABLE_UPLOAD` | `false` | Accept uploads into the import folder (`POST /api/upload`). **Off by default.** The upload screen in the browser isn't built yet (see [docs/upload-and-import.md](docs/upload-and-import.md)), so for now this only turns on the API. |
+| `UPLOAD_MAX_MB` | `500` | Per-file size limit for uploads. |
+| `METAFLAC` | `metaflac` | Path to the `metaflac` program used to write FLAC tags (included in the Docker image). |
+
+**About uploads:** the editor has no login of its own. While `ENABLE_UPLOAD` is on, anyone who can reach the editor can
+upload audio files into the import folder (only audio, size-limited, never overwriting, never outside the music folder).
+Keep it off unless you use it, and put the editor behind your reverse proxy's authentication if it's reachable beyond
+your home network.
+
+**Getting new files in without uploading:** anything that puts files into the import folder (a network share, a
+download client, `scp`) shows up in the editor; the 📥 Import button and the folder filter help you find them. The full
+design, including an optional Lidarr hand-off that isn't built yet, is in
+[docs/upload-and-import.md](docs/upload-and-import.md).
+
 ## 🚢 Deployment Options
 
 ### **Docker (Recommended)**
@@ -308,6 +337,9 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
+      # - IMPORT_DIR=import        # the import folder inside /music (default "import"; empty = no 📥 Import button)
+      # - ENABLE_UPLOAD=true       # accept uploads into the import folder (off by default; read the Settings section)
+      # - UPLOAD_MAX_MB=500
 ```
 
 ### **Interactive Deployment**
