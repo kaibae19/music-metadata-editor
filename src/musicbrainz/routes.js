@@ -43,7 +43,7 @@ function register(app, { getFullPath, musicDir }) {
         if (list.length > MAX_FILES) throw Object.assign(new Error(`At most ${MAX_FILES} files at once`), { status: 400 });
         return list.map(p => {
             const full = getFullPath(p);
-            if (!SUPPORTED.includes(path.extname(full).toLowerCase())) throw Object.assign(new Error(`${path.basename(full)}: MusicBrainz mode supports ${SUPPORTED.join(' and ')} for now`), { status: 400 });
+            if (!SUPPORTED.includes(path.extname(full).toLowerCase())) throw Object.assign(new Error(`${path.basename(full)}: MusicBrainz mode supports ${SUPPORTED.slice(0, -1).join(', ')} and ${SUPPORTED[SUPPORTED.length - 1]} for now`), { status: 400 });
             return full;
         });
     }

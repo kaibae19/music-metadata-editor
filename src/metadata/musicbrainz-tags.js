@@ -1,7 +1,8 @@
 // File: src/metadata/musicbrainz-tags.js
 // Write the MusicBrainz tags Lidarr reads (docs/musicbrainz-mode.md), with Picard's tag names, then read them back.
 // MP3: ID3 TXXX frames by description + the UFID frame owned by http://musicbrainz.org (replaced, never appended).
-// FLAC: Vorbis comments through metaflac. Other formats: not yet (M4A waits for a read-back test).
+// FLAC: Vorbis comments through metaflac.
+// M4A: iTunes freeform atoms ----:com.apple.iTunes:<Picard name> through node-taglib-sharp (since 2026-11-11).
 // Every write is backed up first and restored if the read-back doesn't match.
 
 const fs = require('fs').promises;
@@ -33,7 +34,20 @@ const FLAC_IDS = {
     releaseStatus: 'RELEASESTATUS',
     releaseCountry: 'RELEASECOUNTRY',
 };
-const SUPPORTED = ['.mp3', '.flac'];
+// M4A: Picard's iTunes freeform names (MEAN com.apple.iTunes); the same names node-taglib-sharp's AppleTag uses.
+const MP4_MEAN = 'com.apple.iTunes';
+const MP4_FREEFORM = {
+    albumId: 'MusicBrainz Album Id',
+    releaseGroupId: 'MusicBrainz Release Group Id',
+    artistId: 'MusicBrainz Artist Id',
+    albumArtistId: 'MusicBrainz Album Artist Id',
+    recordingId: 'MusicBrainz Track Id',          // Picard's name for the recording (as in FLAC's MUSICBRAINZ_TRACKID)
+    releaseTrackId: 'MusicBrainz Release Track Id',
+    releaseType: 'MusicBrainz Album Type',
+    releaseStatus: 'MusicBrainz Album Status',
+    releaseCountry: 'MusicBrainz Album Release Country',
+};
+const SUPPORTED = ['.mp3', '.flac', '.m4a'];
 
 /**
  * The fields for one track of a normalized release (src/musicbrainz/client.js).
@@ -112,6 +126,29 @@ async function writeFLAC(file, { ids, names }) {
     await flac.writeTags(file, changes);
 }
 
+async function writeM4A(file, { ids, names }) {
+    const { File, TagTypes } = require('node-taglib-sharp');   // lazy: only M4A needs it
+    const f = File.createFromPath(file);
+    try {
+        const tag = f.getTag(TagTypes.Apple, true);
+        for (const [k, name] of Object.entries(MP4_FREEFORM)) {
+            const v = ids[k];
+            const vals = Array.isArray(v) ? v.map(String) : (v ? [String(v)] : []);
+            tag.setItunesStrings(MP4_MEAN, name, ...vals);        // no values = remove
+        }
+        if (names) {
+            tag.title = names.title || undefined;
+            tag.performers = names.artist ? [String(names.artist)] : [];
+            tag.album = names.album || undefined;
+            tag.albumArtists = names.albumartist ? [String(names.albumartist)] : [];
+            tag.track = names.track || 0; tag.trackCount = names.trackTotal || 0;
+            tag.disc = names.disc || 0; tag.discCount = names.discTotal || 0;
+            tag.year = names.date ? parseInt(names.date.slice(0, 4), 10) || 0 : 0;
+        }
+        f.save();
+    } finally { f.dispose(); }
+}
+
 /** What a file says now, read the way the editor reads (music-metadata), MusicBrainz fields included. */
 async function readMusicBrainzTags(file) {
     const c = (await mm.parseFile(file, { duration: false, skipCovers: true })).common;
@@ -137,7 +174,7 @@ function mismatches(fields, got) {
         if ((fields.ids[k] || null) !== (got[k] || null)) bad.push(`${k}: wanted ${fields.ids[k]}, file says ${got[k]}`);
     }
     if (fields.names) {
-        for (const k of ['title', 'album', 'albumartist']) if ((fields.names[k] || null) !== (got[k] || null)) bad.push(`${k}: wanted ${fields.names[k]}, file says ${got[k]}`);
+        for (const k of ['title', 'artist', 'album', 'albumartist']) if ((fields.names[k] || null) !== (got[k] || null)) bad.push(`${k}: wanted ${fields.names[k]}, file says ${got[k]}`);
         if (got.track !== fields.names.track) bad.push(`track: wanted ${fields.names.track}, file says ${got.track}`);
     }
     return bad;
@@ -149,11 +186,11 @@ function mismatches(fields, got) {
  */
 async function applyToFile(file, fields, { write } = {}) {
     const ext = path.extname(file).toLowerCase();
-    if (!SUPPORTED.includes(ext)) return { file, ok: false, error: `${ext || 'this format'} isn't supported in MusicBrainz mode yet (MP3 and FLAC are)` };
+    if (!SUPPORTED.includes(ext)) return { file, ok: false, error: `${ext || 'this format'} isn't supported in MusicBrainz mode yet (MP3, FLAC and M4A are)` };
     const backup = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'mme-backup-')), path.basename(file));
     await fs.copyFile(file, backup);
     try {
-        await (write || (ext === '.mp3' ? writeMP3 : writeFLAC))(file, fields);
+        await (write || ({ '.mp3': writeMP3, '.flac': writeFLAC, '.m4a': writeM4A })[ext])(file, fields);
         const tags = await readMusicBrainzTags(file);
         const bad = mismatches(fields, tags);
         if (bad.length) { await fs.copyFile(backup, file); return { file, ok: false, error: 'read-back did not match; file restored', mismatches: bad }; }
@@ -166,4 +203,4 @@ async function applyToFile(file, fields, { write } = {}) {
     }
 }
 
-module.exports = { buildFields, applyToFile, readMusicBrainzTags, writeMP3, writeFLAC, mismatches, SUPPORTED, ID3_TXXX, FLAC_IDS };
+module.exports = { buildFields, applyToFile, readMusicBrainzTags, writeMP3, writeFLAC, writeM4A, mismatches, SUPPORTED, ID3_TXXX, FLAC_IDS, MP4_FREEFORM };

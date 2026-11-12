@@ -103,8 +103,10 @@ release id on every track + recording ids:   accepted, all 5 tracks mapped to th
 
 - **MP3:** `node-id3` supports `userDefinedText` (TXXX) and `uniqueFileIdentifier` (UFID). First.
 - **FLAC:** `metaflac-js2` sets arbitrary Vorbis comments. First.
-- **M4A:** freeform `----` atoms through `mp3tag.js` are unproven (the M4A writer is the fragile part of the code
-  today). Ship after a test file reads back correctly, in this editor and in another tool.
+- **M4A (built 2026-11-11):** freeform `----:com.apple.iTunes:<Picard name>` atoms through `node-taglib-sharp`
+  (`AppleTag.setItunesStrings`; the same names its own `musicBrainzReleaseId`/`musicBrainzTrackId` use), read back
+  with `music-metadata` (a different reader). The old `mp3tag.js` path never wrote M4A at all (it reported success
+  and left the file unchanged).
 
 ## Tests
 

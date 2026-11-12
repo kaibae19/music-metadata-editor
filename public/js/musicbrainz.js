@@ -1,10 +1,10 @@
 // File: public/js/musicbrainz.js
 // MusicBrainz mode (docs/musicbrainz-mode.md): look the album up on MusicBrainz, pick the edition, map files to
-// tracks, preview, write the IDs Lidarr reads. Works on the Ctrl-selected files, or on every MP3/FLAC in the folder.
+// tracks, preview, write the IDs Lidarr reads. Works on the Ctrl-selected files, or on every MP3/FLAC/M4A in the folder.
 // Everything shown is built with textContent (no HTML from file names or MusicBrainz reaches innerHTML).
 
 (() => {
-    const SUPPORTED = ['.mp3', '.flac'];
+    const SUPPORTED = ['.mp3', '.flac', '.m4a'];
     const el = (tag, attrs = {}, ...kids) => {
         const e = document.createElement(tag);
         for (const [k, v] of Object.entries(attrs)) {
@@ -38,7 +38,7 @@
             this.button.addEventListener('click', () => this.open());
         }
 
-        /** Ctrl-selected MP3/FLAC files, else every MP3/FLAC in the current folder. */
+        /** Ctrl-selected MP3/FLAC/M4A files, else every one of those in the current folder. */
         targetFiles() {
             const isOk = p => SUPPORTED.some(x => p.toLowerCase().endsWith(x));
             const picked = [...this.editor.selectedItems].filter(k => k.startsWith('file:')).map(k => k.slice(5)).filter(isOk);
@@ -56,9 +56,9 @@
                 if (ext && !SUPPORTED.includes(ext)) other[ext] = (other[ext] || 0) + 1;
             }
             const list = Object.entries(other).map(([ext, n]) => `${n} ${ext.slice(1).toUpperCase()} file${n === 1 ? '' : 's'}`);
-            if (list.length) return `MusicBrainz mode works on ${SUPPORTED.map(x => x.slice(1).toUpperCase()).join(' and ')}; ` +
+            if (list.length) return `MusicBrainz mode works on ${(n => n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1])(SUPPORTED.map(x => x.slice(1).toUpperCase()))}; ` +
                 `${sel.length ? 'the selection has' : 'this folder has'} ${list.join(', ')} (not supported here yet)`;
-            return 'MusicBrainz: no MP3 or FLAC files here (select some, or open an album folder)';
+            return 'MusicBrainz: no MP3, FLAC or M4A files here (select some, or open an album folder)';
         }
 
         async open() {

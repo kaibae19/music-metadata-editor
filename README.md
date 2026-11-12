@@ -226,7 +226,7 @@ disc numbers and date. Each file is backed up, written and read back; a mismatch
 
 - It **helps Lidarr, it never talks to it**: add the artist in Lidarr, and the tagged files import onto the edition you
   picked. Plain tag editing is unchanged.
-- MP3 and FLAC for now; M4A later.
+- MP3, FLAC and M4A (iTunes freeform tags, the names Picard writes).
 - MusicBrainz is asked at most once a second, with an identifying User-Agent; no account needed.
 - Design and what Lidarr reads: [`docs/musicbrainz-mode.md`](docs/musicbrainz-mode.md).
 

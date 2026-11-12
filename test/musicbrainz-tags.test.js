@@ -18,6 +18,10 @@ function copy(ext) {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'mme-'));
     const f = path.join(d, `a${ext}`);
     fs.copyFileSync(path.join(__dirname, 'fixtures', `silence${ext}`), f);
+    if (ext === '.m4a') {   // the MP3/FLAC fixtures carry "Old Title"/"Wrong Album"; give the M4A copy the same
+        const { File } = require('node-taglib-sharp');
+        const m = File.createFromPath(f); m.tag.title = 'Old Title'; m.tag.album = 'Wrong Album'; m.save(); m.dispose();
+    }
     return f;
 }
 
@@ -34,7 +38,7 @@ test('fields for track 3: the IDs Lidarr reads, lower-case type and status, name
     assert.throws(() => buildFields(release, 2, 1), /no track 2-1/);
 });
 
-for (const ext of ['.mp3', '.flac']) {
+for (const ext of ['.mp3', '.flac', '.m4a']) {
     const opts = ext === '.flac' ? flacOpts : {};
 
     test(`${ext}: write + read back, names on`, opts, async () => {
@@ -71,8 +75,15 @@ for (const ext of ['.mp3', '.flac']) {
             const t = NodeID3.read(file);
             assert.equal(t.uniqueFileIdentifier.filter(u => u.ownerIdentifier === 'http://musicbrainz.org').length, 1);
             assert.equal(t.userDefinedText.filter(x => x.description === 'MusicBrainz Album Id').length, 1);
-        } else {
+        } else if (ext === '.flac') {
             assert.equal((await flac.readTags(file)).MUSICBRAINZ_TRACKID.length, 1);
+        } else {
+            const { File, TagTypes } = require('node-taglib-sharp');
+            const m = File.createFromPath(file);
+            const tag = m.getTag(TagTypes.Apple, false);
+            assert.equal(tag.getItunesStrings('com.apple.iTunes', 'MusicBrainz Track Id').length, 1);
+            assert.equal(tag.getItunesStrings('com.apple.iTunes', 'MusicBrainz Album Id').length, 1);
+            m.dispose();
         }
     });
 
@@ -110,9 +121,9 @@ test('flac: other tags survive (ReplayGain, description)', flacOpts, async () =>
 
 test('unsupported formats say so and leave the file alone', async () => {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'mme-'));
-    const f = path.join(d, 'a.m4a'); fs.writeFileSync(f, 'x');
+    const f = path.join(d, 'a.ogg'); fs.writeFileSync(f, 'x');
     const r = await applyToFile(f, buildFields(release, 1, 1));
     assert.equal(r.ok, false);
-    assert.match(r.error, /\.m4a isn't supported in MusicBrainz mode yet/);
+    assert.match(r.error, /\.ogg isn't supported in MusicBrainz mode yet \(MP3, FLAC and M4A are\)/);
     assert.equal(fs.readFileSync(f, 'utf8'), 'x');
 });

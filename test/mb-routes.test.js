@@ -19,7 +19,7 @@ const files = titles.map((t, i) => {
     NodeID3.update({ title: t, artist: 'Carbon Leaf', album: 'The Hunting Ground', trackNumber: String(i + 1) }, path.join(dir, name));
     return `Carbon Leaf/Hunting Ground/${name}`;
 });
-fs.writeFileSync(path.join(dir, 'cover.m4a'), 'x');
+fs.writeFileSync(path.join(dir, 'cover.ogg'), 'x');
 process.env.MUSIC_DIR = root;
 const { app } = require('../src/app');
 const { MusicBrainzClient } = require('../src/musicbrainz/client');
@@ -99,7 +99,7 @@ test('refused: two files on one track, a track that does not exist, outside the 
     assert.equal((await post('/api/mb/apply', { release: REL, mapping: dup })).status, 400);
     assert.equal((await post('/api/mb/apply', { release: REL, mapping: [{ ...mapping[0], position: 9 }] })).status, 400);
     assert.equal((await post('/api/mb/match', { files: ['../../etc/passwd.mp3'], release: REL })).status, 400);
-    assert.match((await post('/api/mb/match', { files: ['Carbon Leaf/Hunting Ground/cover.m4a'], release: REL })).body.error, /supports \.mp3 and \.flac/);
+    assert.match((await post('/api/mb/match', { files: ['Carbon Leaf/Hunting Ground/cover.ogg'], release: REL })).body.error, /supports \.mp3, \.flac and \.m4a/);
     assert.equal((await post('/api/mb/match', { files: [], release: REL })).status, 400);
 });
 
