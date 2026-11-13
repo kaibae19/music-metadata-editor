@@ -106,6 +106,7 @@ chmod +x deploy.sh
 - **Smart behavior** - won't navigate away when you have files selected
 - **Folder filter** - type in the filter box above the file list to narrow the current folder by name; `/` jumps to it, Esc clears it
 - **📥 Import shortcut** - a button next to the breadcrumb opens the import folder (`IMPORT_DIR`, default `import` inside your music folder), where new files land before you tag them. Hidden when `IMPORT_DIR` is turned off; if the folder doesn't exist yet, the status bar says so
+- **⬆️ Upload** (when `ENABLE_UPLOAD=true`) - pick audio files, or drop files or whole folders on the file list; they're saved into the import folder, which then opens with the new files selected, ready for 🎼 MusicBrainz. A progress bar while it runs, then a summary that names anything skipped (not audio, a zip, too big) or refused, and says when a name already existed (kept as "… (2)": nothing is overwritten)
 
 ### **🎵 Enhanced Metadata Editing Experience**
 - **Single file editing** - all fields available with live validation
@@ -296,7 +297,7 @@ All settings are environment variables. Everything is optional except the music 
 | `MUSIC_DIR` | `/music` | The music folder inside the container. Every file route stays inside it. |
 | `PORT` | `3000` | The port the web interface listens on. |
 | `IMPORT_DIR` | `import` | The import folder, **relative to `MUSIC_DIR`**, so it is always inside the music folder. The 📥 Import button opens it. Set it to an empty value to hide the button; a path that would land outside the music folder is refused (the button stays hidden and the log says why). |
-| `ENABLE_UPLOAD` | `false` | Accept uploads into the import folder (`POST /api/upload`). **Off by default.** The upload screen in the browser isn't built yet (see [docs/upload-and-import.md](docs/upload-and-import.md)), so for now this only turns on the API. |
+| `ENABLE_UPLOAD` | `false` | Accept uploads into the import folder (`POST /api/upload`). **Off by default.** Shows the ⬆️ Upload button and the drop area over the file list (see [docs/upload-and-import.md](docs/upload-and-import.md)). |
 | `UPLOAD_MAX_MB` | `500` | Per-file size limit for uploads. |
 | `METAFLAC` | `metaflac` | Path to the `metaflac` program used to write FLAC tags (included in the Docker image). |
 

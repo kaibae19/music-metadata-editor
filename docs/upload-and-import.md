@@ -1,6 +1,6 @@
 # Upload and import folder (design)
 
-Status: **steps 1–2 built** (2026-11-11): the folder filter, the 📥 Import shortcut (`IMPORT_DIR`) and `POST /api/upload` (off by default). The README documents these settings (its Settings section). Steps 3–4 (upload UI, Lidarr hand-off) are design; the `LIDARR_*` settings below don't exist yet.
+Status: **steps 1–3 built**: the folder filter, the 📥 Import shortcut (`IMPORT_DIR`) and `POST /api/upload` (2026-11-11), and the upload screen (2026-11-12; `public/js/upload.js`). Upload stays off by default. The README documents these settings (its Settings section). Step 4 (Lidarr hand-off) is design; the `LIDARR_*` settings below don't exist yet.
 
 ## Why
 
@@ -31,9 +31,14 @@ way of putting files there (a share, `scp`, a download client) keeps working. Bo
 
 ## Upload
 
-- **UI:** with `ENABLE_UPLOAD=true`, an "Upload" button and a drop area over the file list. Drop files (or pick them);
-  a progress line per file; when done, the view opens the import folder with the new files selected, and the status
-  bar offers "Look up on MusicBrainz".
+- **UI (built 2026-11-12, `public/js/upload.js`):** with `ENABLE_UPLOAD=true`, a "⬆️ Upload" button after 📥 Import
+  and a drop area over the file list (files, or whole folders: walked up to 4 levels, flattened into the import folder).
+  The browser skips what the server would refuse anyway (not an audio extension, a `.zip` with an "unzip it first" hint,
+  over `UPLOAD_MAX_MB`, empty) before sending anything. Files go one at a time (XHR, for upload progress) with one
+  progress bar and "Uploading 3 of 12: name (45%)". Then a summary panel (stays until closed) names what was skipped or
+  refused and why, and says when a name already existed ("… (2)", nothing overwritten); the import folder opens with
+  the new files selected, ready for 🎼 MusicBrainz. Tested headless (Chromium, Playwright): picker, synthetic drop,
+  duplicate name, mixed bag; 20 checks.
 - **Endpoint (built 2026-11-11):** one file per request, the raw bytes as the body (no multipart parser, no new
   dependency): `POST /api/upload?name=<original file name>` → `200 { saved: { name, path, size, container } }`, or
   `400` (no name / empty), `403` (upload off / no import folder), `413` (too big), `415` (not an audio type, or the
