@@ -299,12 +299,21 @@ All settings are environment variables. Everything is optional except the music 
 | `IMPORT_DIR` | `import` | The import folder, **relative to `MUSIC_DIR`**, so it is always inside the music folder. The 📥 Import button opens it. Set it to an empty value to hide the button; a path that would land outside the music folder is refused (the button stays hidden and the log says why). |
 | `ENABLE_UPLOAD` | `false` | Accept uploads into the import folder (`POST /api/upload`). **Off by default.** Shows the ⬆️ Upload button and the drop area over the file list (see [docs/upload-and-import.md](docs/upload-and-import.md)). |
 | `UPLOAD_MAX_MB` | `500` | Per-file size limit for uploads. |
+| `ALLOWED_HOSTS` | unset | Comma-separated host names (or `name:port`) the editor answers to, e.g. `192.0.2.20,music.example.com`. Any other `Host` is refused, which blocks DNS-rebinding tricks (loopback names always work, for the container's health check). Unset = any host (the log says so at startup). |
 | `METAFLAC` | `metaflac` | Path to the `metaflac` program used to write FLAC tags (included in the Docker image). |
 
 **About uploads:** the editor has no login of its own. While `ENABLE_UPLOAD` is on, anyone who can reach the editor can
 upload audio files into the import folder (only audio, size-limited, never overwriting, never outside the music folder).
 Keep it off unless you use it, and put the editor behind your reverse proxy's authentication if it's reachable beyond
 your home network.
+
+**Other websites can't drive it:** every request that changes something (upload, tag, rename, delete) must come from
+the editor's own page. The browser's `Sec-Fetch-Site`/`Origin` headers are checked, and uploads must be sent as
+`application/octet-stream`, which a page on another site can't do without a permission check the editor never grants.
+So a web page you happen to visit can't upload or delete through your browser. Scripts on your network (curl) still
+work. Set `ALLOWED_HOSTS` to also block a hostile domain name pointed at the editor's address (DNS rebinding).
+Upload names are reduced to a plain file name (no folders, no control or invisible direction characters), only audio
+that actually parses as audio is kept, and file names are never passed through a shell.
 
 **Getting new files in without uploading:** anything that puts files into the import folder (a network share, a
 download client, `scp`) shows up in the editor; the 📥 Import button and the folder filter help you find them. The full
@@ -341,6 +350,7 @@ services:
       # - IMPORT_DIR=import        # the import folder inside /music (default "import"; empty = no 📥 Import button)
       # - ENABLE_UPLOAD=true       # accept uploads into the import folder (off by default; read the Settings section)
       # - UPLOAD_MAX_MB=500
+      # - ALLOWED_HOSTS=192.0.2.20,music.example.com   # answer only to these names (blocks DNS rebinding)
 ```
 
 ### **Interactive Deployment**

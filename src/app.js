@@ -15,6 +15,38 @@ const MUSIC_DIR = path.resolve(process.env.MUSIC_DIR || '/music');
 const MetadataWriter = require('./metadata/writer');
 const metadataWriter = new MetadataWriter();
 
+// Cross-site guard (2026-11-12). The editor has no login, so two things must not work:
+//  - CSRF: a web page the user happens to visit making their browser change files here (upload, rename, delete, tag).
+//    Every request that changes something (anything but GET/HEAD/OPTIONS) must come from the editor's own page:
+//    Sec-Fetch-Site, when the browser sends it, must be same-origin or none (typed/bookmarked), and Origin, when
+//    present, must match the Host the request went to. Requests with neither header (curl, a script on the LAN) pass:
+//    no web page can send those.
+//  - DNS rebinding: a hostile name pointed at this server is same-origin with itself, so the checks above can't see it.
+//    ALLOWED_HOSTS (optional, comma-separated; "name" matches any port, "name:port" one port) refuses any request
+//    whose Host isn't listed (loopback names always pass). Unset = no Host check (a startup line says so).
+const ALLOWED_HOSTS = String(process.env.ALLOWED_HOSTS || '').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+if (!ALLOWED_HOSTS.length) console.log('ALLOWED_HOSTS not set: any Host header is accepted (set it to guard against DNS rebinding)');
+function hostAllowed(host) {
+    const h = String(host || '').toLowerCase();
+    const name = h.replace(/:\d+$/, '');
+    // loopback always: the container's own health check uses it, and a hostile domain can't send it as its Host
+    if (['127.0.0.1', 'localhost', '[::1]'].includes(name)) return true;
+    return ALLOWED_HOSTS.some(a => a === h || (!/:\d+$/.test(a) && a === name));
+}
+app.use((req, res, next) => {
+    if (ALLOWED_HOSTS.length && !hostAllowed(req.headers.host)) return res.status(403).json({ error: 'Host not allowed' });
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+    const site = req.headers['sec-fetch-site'];
+    if (site && site !== 'same-origin' && site !== 'none') return res.status(403).json({ error: 'Cross-site request refused' });
+    const origin = req.headers.origin;
+    if (origin !== undefined) {
+        let ok = false;
+        try { ok = new URL(origin).host.toLowerCase() === String(req.headers.host || '').toLowerCase(); } catch { ok = false; }
+        if (!ok) return res.status(403).json({ error: 'Cross-site request refused' });
+    }
+    next();
+});
+
 // Middleware
 app.use(express.json());
 app.use(express.static('public'));
@@ -668,7 +700,9 @@ const crypto = require('crypto');
 
 function uploadName(raw) {
     // base name only: drop any folder part (/ or \), control characters and leading dots; trim; cap the length
-    let name = String(raw || '').split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/^\.+/, '');
+    // also invisible direction/format marks (U+200B–200F, U+202A–202E, U+2066–2069, U+FEFF), which can make a name
+    // display with a different extension than it really has
+    let name = String(raw || '').split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '').trim().replace(/^\.+/, '');
     if (name.length > 200) name = name.slice(0, 200 - path.extname(name).length) + path.extname(name);
     return name;
 }
@@ -690,6 +724,9 @@ app.get('/api/upload', (req, res) => {
 app.post('/api/upload', async (req, res) => {
     if (!UPLOAD_ENABLED) return res.status(403).json({ error: 'Upload is off (set ENABLE_UPLOAD=true)' });
     if (!IMPORT_DIR) return res.status(403).json({ error: 'No import folder (IMPORT_DIR)' });
+    // raw bytes must be sent as application/octet-stream: a cross-site page can't send that type without a CORS
+    // preflight, which this server never answers (text/plain would slip through as a "simple" request)
+    if (!/^application\/octet-stream\b/i.test(String(req.headers['content-type'] || ''))) return res.status(415).json({ error: 'Send the file as application/octet-stream' });
     const name = uploadName(req.query.name);
     if (!name) return res.status(400).json({ error: 'Missing file name' });
     if (!isAudioFile(name)) return res.status(415).json({ error: `Not an audio file type: ${path.extname(name) || '(none)'}` });

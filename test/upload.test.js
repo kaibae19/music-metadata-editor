@@ -67,7 +67,7 @@ test('refused: wrong type, not audio inside, too big, empty, no name; nothing le
     assert.equal((await up('fake.mp3', Buffer.alloc(4000, 'x'))).status, 415);
     assert.equal((await up('big.mp3', Buffer.concat(Array(15).fill(mp3)))).status, 413);
     assert.equal((await up('empty.mp3', Buffer.alloc(0))).status, 400);
-    assert.equal((await fetch(`${base}/api/upload`, { method: 'POST', body: mp3 })).status, 400);
+    assert.equal((await fetch(`${base}/api/upload`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: mp3 })).status, 400);
     for (const f of ['notes.txt', 'fake.mp3', 'big.mp3', 'empty.mp3']) assert.equal(fs.existsSync(path.join(imp, f)), false, f);
     assert.deepEqual(leftovers(), []);
 });
