@@ -106,7 +106,7 @@ chmod +x deploy.sh
 - **Smart behavior** - won't navigate away when you have files selected
 - **Folder filter** - type in the filter box above the file list to narrow the current folder by name; `/` jumps to it, Esc clears it
 - **📥 Import shortcut** - a button next to the breadcrumb opens the import folder (`IMPORT_DIR`, default `import` inside your music folder), where new files land before you tag them. Hidden when `IMPORT_DIR` is turned off; if the folder doesn't exist yet, the status bar says so
-- **⬆️ Upload** (when `ENABLE_UPLOAD=true`) - pick audio files, or drop files or whole folders on the file list; they're saved into the import folder, which then opens with the new files selected, ready for 🎼 MusicBrainz. A progress bar while it runs, then a summary that names anything skipped (not audio, a zip, too big) or refused, and says when a name already existed (kept as "… (2)": nothing is overwritten)
+- **⬆️ Upload** (when `ENABLE_UPLOAD=true`) - pick audio files or album **zips**, or drop files or whole folders on the file list (a zip's audio is unpacked into its own folder, `import/<zip name>/`, keeping disc folders; covers and other non-audio are skipped); they're saved into the import folder, which then opens with the new files selected, ready for 🎼 MusicBrainz. A progress bar while it runs, then a summary that names anything skipped (not audio, a zip, too big) or refused, and says when a name already existed (kept as "… (2)": nothing is overwritten)
 
 ### **🎵 Enhanced Metadata Editing Experience**
 - **Single file editing** - all fields available with live validation
@@ -298,7 +298,8 @@ All settings are environment variables. Everything is optional except the music 
 | `PORT` | `3000` | The port the web interface listens on. |
 | `IMPORT_DIR` | `import` | The import folder, **relative to `MUSIC_DIR`**, so it is always inside the music folder. The 📥 Import button opens it. Set it to an empty value to hide the button; a path that would land outside the music folder is refused (the button stays hidden and the log says why). |
 | `ENABLE_UPLOAD` | `false` | Accept uploads into the import folder (`POST /api/upload`). **Off by default.** Shows the ⬆️ Upload button and the drop area over the file list (see [docs/upload-and-import.md](docs/upload-and-import.md)). |
-| `UPLOAD_MAX_MB` | `500` | Per-file size limit for uploads. |
+| `UPLOAD_MAX_MB` | `500` | Per-file size limit for uploads (and for each file unpacked from a zip). |
+| `UPLOAD_ZIP_MAX_MB` | `2048` | Size limit for an uploaded `.zip`; what it unpacks to may be at most twice that. |
 | `ALLOWED_HOSTS` | unset | Comma-separated host names (or `name:port`) the editor answers to, e.g. `192.0.2.20,music.example.com`. Any other `Host` is refused, which blocks DNS-rebinding tricks (loopback names always work, for the container's health check). Unset = any host (the log says so at startup). |
 | `METAFLAC` | `metaflac` | Path to the `metaflac` program used to write FLAC tags (included in the Docker image). |
 
@@ -313,7 +314,11 @@ the editor's own page. The browser's `Sec-Fetch-Site`/`Origin` headers are check
 So a web page you happen to visit can't upload or delete through your browser. Scripts on your network (curl) still
 work. Set `ALLOWED_HOSTS` to also block a hostile domain name pointed at the editor's address (DNS rebinding).
 Upload names are reduced to a plain file name (no folders, no control or invisible direction characters), only audio
-that actually parses as audio is kept, and file names are never passed through a shell.
+that actually parses as audio is kept, and file names are never passed through a shell. Zips are treated as hostile:
+entries that point outside their folder (`../`, absolute paths), links and encrypted entries are refused or skipped,
+zip bombs are refused (entry count, per-file and total size limits, and a compression-ratio check, with sizes
+counted while unpacking), and an album only appears once it's complete: nothing is ever merged into an existing
+folder or overwritten.
 
 **Getting new files in without uploading:** anything that puts files into the import folder (a network share, a
 download client, `scp`) shows up in the editor; the 📥 Import button and the folder filter help you find them. The full
@@ -350,6 +355,7 @@ services:
       # - IMPORT_DIR=import        # the import folder inside /music (default "import"; empty = no 📥 Import button)
       # - ENABLE_UPLOAD=true       # accept uploads into the import folder (off by default; read the Settings section)
       # - UPLOAD_MAX_MB=500
+      # - UPLOAD_ZIP_MAX_MB=2048
       # - ALLOWED_HOSTS=192.0.2.20,music.example.com   # answer only to these names (blocks DNS rebinding)
 ```
 

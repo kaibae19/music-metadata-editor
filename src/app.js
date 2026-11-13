@@ -294,6 +294,7 @@ app.get('/api/files', async (req, res) => {
             const itemPath = path.join(fullPath, item.name);
             const relativePath = path.relative(MUSIC_DIR, itemPath);
             
+            if (item.isDirectory() && item.name.startsWith('.upload-')) continue;   // a zip being unpacked
             if (item.isDirectory()) {
                 result.push({
                     name: item.name,
@@ -695,6 +696,7 @@ app.get('/api/import', async (req, res) => {
 // a temp file first (no half files).
 const UPLOAD_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.ENABLE_UPLOAD || ''));
 const UPLOAD_MAX_BYTES = Math.round((parseFloat(process.env.UPLOAD_MAX_MB) || 500) * 1024 * 1024);
+const UPLOAD_ZIP_MAX_BYTES = Math.round((parseFloat(process.env.UPLOAD_ZIP_MAX_MB) || 2048) * 1024 * 1024);
 const fsSync = require('fs');
 const crypto = require('crypto');
 
@@ -718,7 +720,7 @@ async function freeName(dir, name) {
 
 app.get('/api/upload', (req, res) => {
     res.json({ enabled: UPLOAD_ENABLED && !!IMPORT_DIR, maxBytes: UPLOAD_MAX_BYTES, extensions: AUDIO_EXTENSIONS,
-        importPath: IMPORT_DIR ? IMPORT_DIR.rel : null });
+        importPath: IMPORT_DIR ? IMPORT_DIR.rel : null, zipMaxBytes: UPLOAD_ZIP_MAX_BYTES });
 });
 
 app.post('/api/upload', async (req, res) => {
@@ -774,6 +776,13 @@ app.post('/api/upload', async (req, res) => {
         console.error('Upload failed:', error);
         res.status(500).json({ error: 'Upload failed' });
     }
+});
+
+// Zip upload (src/upload-zip.js): the audio inside a .zip, unpacked into its own folder in the import folder
+require('./upload-zip').register(app, {
+    uploadEnabled: UPLOAD_ENABLED, importDir: IMPORT_DIR, cleanName: uploadName, isAudioFile, freeName,
+    fileMaxBytes: UPLOAD_MAX_BYTES, zipMaxBytes: UPLOAD_ZIP_MAX_BYTES,
+    isAudio: async file => { try { return (await parseFile(file, { duration: false, skipCovers: true })).format.container || null; } catch { return null; } },
 });
 
 // Health check

@@ -1,6 +1,6 @@
 # Upload and import folder (design)
 
-Status: **steps 1–3 built**: the folder filter, the 📥 Import shortcut (`IMPORT_DIR`) and `POST /api/upload` (2026-11-11), and the upload screen (2026-11-12; `public/js/upload.js`). Upload stays off by default. The README documents these settings (its Settings section). Step 4 (Lidarr hand-off) is design; the `LIDARR_*` settings below don't exist yet.
+Status: **steps 1–3 built**: the folder filter, the 📥 Import shortcut (`IMPORT_DIR`) and `POST /api/upload` (2026-11-11), the upload screen (2026-11-12; `public/js/upload.js`) and zip upload (2026-11-12; `src/upload-zip.js`). Upload stays off by default. The README documents these settings (its Settings section). Step 4 (Lidarr hand-off) is design; the `LIDARR_*` settings below don't exist yet.
 
 ## Why
 
@@ -24,7 +24,8 @@ way of putting files there (a share, `scp`, a download client) keeps working. Bo
 |---|---|---|
 | `IMPORT_DIR` | `import` | Import folder, **relative to `MUSIC_DIR`** (so it's always inside the music folder and the editor can browse it). Created on first upload. Empty = off (no 📥 Import button). |
 | `ENABLE_UPLOAD` | `false` | Show the upload area and accept `POST /api/upload`. |
-| `UPLOAD_MAX_MB` | `500` | Per-file size limit. |
+| `UPLOAD_MAX_MB` | `500` | Per-file size limit (also for each file unpacked from a zip). |
+| `UPLOAD_ZIP_MAX_MB` | `2048` | Size limit for an uploaded zip; it may unpack to at most twice that. |
 | `LIDARR_URL` | unset | e.g. `http://lidarr:8686`. Unset = the editor never talks to Lidarr. |
 | `LIDARR_API_KEY` | unset | Lidarr → Settings → General → API Key. Read from the environment (or a Docker secret file), never shown in the UI or logged. |
 | `LIDARR_IMPORT_PATH` | `/import` | The same import folder **as Lidarr's container sees it** (see "Lidarr setup"). |
@@ -55,6 +56,27 @@ way of putting files there (a share, `scp`, a download client) keeps working. Bo
   - files are written with the process's user and a `0664` mode, so the *arr containers (usually the same PUID/PGID)
     can move them;
   - put the editor behind your reverse proxy's auth if it's reachable beyond your home network.
+
+## Zip upload (built 2026-11-12)
+
+Album purchases (Amazon MP3, Bandcamp, …) often download as one `.zip`. `POST /api/upload/zip?name=<Album.zip>`, the
+raw zip as an `application/octet-stream` body, unpacks the **audio** in it into a new folder, `import/<zip name>/`.
+Disc folders inside stay; one top folder shared by every file (`Album/…`, `Artist/Album/…`) is dropped, since the new
+folder already carries the name. Answer: `{ folder: { name, path }, saved: [...], skipped: [{ name, why }] }`. The upload
+screen sends `.zip` files there; a single album zip opens its folder with the tracks selected.
+
+A zip from the network is hostile input (`src/upload-zip.js`, parser [yauzl](https://github.com/thejoshwolfe/yauzl),
+pinned):
+- **Zip slip:** yauzl refuses entry names that are absolute, contain `..` segments or `\` (`strictFileNames`); every
+  segment is then cleaned like an upload name, and the target must stay inside the album folder.
+- **Never unpacked:** links, encrypted entries, unusual compression methods, macOS `__MACOSX/` and `._` files, and
+  anything that isn't an audio extension. Each is listed in `skipped`.
+- **Zip bombs:** at most 2000 entries; an entry that claims to expand more than 20× (over 1 MB) refuses the whole zip
+  (audio barely compresses); each file ≤ `UPLOAD_MAX_MB`; everything together ≤ 2 × `UPLOAD_ZIP_MAX_MB`. Bytes are
+  counted while unpacking, and yauzl checks them against each entry's declared size.
+- **Real audio only:** every unpacked file must parse as audio, or it's removed again.
+- **All or nothing:** unpacking happens in a hidden `.upload-…` folder (not shown in the file list); only a complete
+  album is renamed into place, under a name that doesn't exist yet (`Album (2)`). A refusal leaves nothing behind.
 
 ## The import folder on disk (works without upload)
 

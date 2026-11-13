@@ -4,6 +4,28 @@
 // It uploads into that music folder; use a throwaway one.
 import { chromium } from 'playwright';
 import { readFileSync, mkdirSync } from 'node:fs';
+import zlib from 'node:zlib';
+
+// a minimal stored zip (same layout as test/upload-zip.test.js)
+function zipOf(entries) {
+    const locals = [], centrals = []; let offset = 0;
+    for (const e of entries) {
+        const name = Buffer.from(e.name, 'utf8'), data = e.data, crc = zlib.crc32(data);
+        const lh = Buffer.alloc(30);
+        lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0x0800, 6);
+        lh.writeUInt32LE(crc, 14); lh.writeUInt32LE(data.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(name.length, 26);
+        locals.push(lh, name, data);
+        const ch = Buffer.alloc(46);
+        ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE((3 << 8) | 20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(0x0800, 8);
+        ch.writeUInt32LE(crc, 16); ch.writeUInt32LE(data.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(name.length, 28);
+        ch.writeUInt32LE((0o100644 << 16) >>> 0, 38); ch.writeUInt32LE(offset, 42);
+        centrals.push(ch, name); offset += 30 + name.length + data.length;
+    }
+    const cd = Buffer.concat(centrals), end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10);
+    end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, cd, end]);
+}
 
 const BASE = process.env.BASE || 'http://127.0.0.1:3999';
 const FIX = process.env.FIX;                      // the repo's test/fixtures
@@ -26,7 +48,7 @@ const order = await page.$$eval('.selection-controls > *', els => els.map(e => e
 check(order.indexOf('uploadBtn') === order.indexOf('importBtn') + 1, 'Upload sits right after Import', order);
 await page.screenshot({ path: `${SHOTS}/1-start.png` });
 
-// 1: the picker, a mixed bag: 2 good, 1 renamed text file (server 415), cover.jpg + a zip (skipped in the browser)
+// 1: the picker, a mixed bag: 2 good, 1 renamed text file (server 415), a fake zip (server 415), cover.jpg (skipped)
 await page.setInputFiles('input[type=file]', [
     { name: '01 - Track One.mp3', mimeType: 'audio/mpeg', buffer: mp3 },
     { name: '02 - Track Two.flac', mimeType: 'audio/flac', buffer: flac },
@@ -38,9 +60,9 @@ await page.waitForSelector('.upload-panel:not([hidden]) .upload-close', { timeou
 await page.waitForFunction(() => window.metadataEditor.currentPath === 'import' && document.querySelectorAll('.file-item.multi-selected').length > 0, null, { timeout: 10000 }).catch(() => {});
 const summary = await page.textContent('.upload-panel');
 check(/Uploaded 2 files into import\//.test(summary), 'summary: 2 uploaded', summary);
-check(/1 failed/.test(summary) && /2 skipped/.test(summary), 'summary: 1 failed, 2 skipped', summary);
+check(/2 failed/.test(summary) && /1 skipped/.test(summary), 'summary: 2 failed, 1 skipped', summary);
 check(/notes\.mp3: Not a readable audio file/.test(summary), 'the fake mp3 is named with the server reason', summary);
-check(/Album\.zip: a zip: unzip it first/.test(summary), 'the zip gets the unzip hint', summary);
+check(/Album\.zip: Not a readable zip file/.test(summary), 'the fake zip is refused by the server, with the reason', summary);
 check(/cover\.jpg: not an audio file/.test(summary), 'cover.jpg skipped', summary);
 check((await page.getAttribute('.upload-panel', 'class')).includes('error'), 'panel marked error (one failed)');
 const sel = await page.evaluate(() => [...window.metadataEditor.selectedItems].sort());
@@ -81,6 +103,36 @@ check(!(await page.evaluate(() => document.querySelector('.browser-panel').class
 const sel3 = await page.evaluate(() => [...window.metadataEditor.selectedItems].sort());
 check(sel3.length === 2 && sel3.every(k => /Dropped/.test(k)), 'dropped files selected', sel3);
 await page.screenshot({ path: `${SHOTS}/3-after-drop.png` });
+
+// 3b: a real album zip through the picker: its folder opens with the tracks selected; junk is listed as skipped
+await page.click('.upload-close');
+await page.setInputFiles('input[type=file]', [{ name: 'Garth Brooks - Double Live.zip', mimeType: 'application/zip', buffer: zipOf([
+    { name: 'Double Live/01 - Callin Baton Rouge.mp3', data: mp3 },
+    { name: 'Double Live/02 - Two Pina Coladas.flac', data: flac },
+    { name: 'Double Live/cover.jpg', data: Buffer.from([0xff, 0xd8, 0xff]) },
+]) }]);
+await page.waitForSelector('.upload-panel:not([hidden]) .upload-close', { timeout: 15000 });
+await page.waitForFunction(() => window.metadataEditor.currentPath === 'import/Garth Brooks - Double Live', null, { timeout: 10000 }).catch(() => {});
+await page.waitForTimeout(300);
+const s4 = await page.textContent('.upload-panel');
+check(/Unpacked Garth Brooks - Double Live\.zip into import\/Garth Brooks - Double Live\/ \(2 files\)/.test(s4), 'zip: unpacked into its own folder', s4);
+check(/cover\.jpg: not an audio file/.test(s4), 'zip: the cover is listed as skipped', s4);
+check(await page.evaluate(() => window.metadataEditor.currentPath) === 'import/Garth Brooks - Double Live', 'zip: the album folder is open');
+const sel4 = await page.evaluate(() => [...window.metadataEditor.selectedItems].sort());
+check(JSON.stringify(sel4) === JSON.stringify(['file:import/Garth Brooks - Double Live/01 - Callin Baton Rouge.mp3', 'file:import/Garth Brooks - Double Live/02 - Two Pina Coladas.flac']), 'zip: its tracks are selected', sel4);
+await page.screenshot({ path: `${SHOTS}/3b-after-zip.png` });
+
+// 3c: a zip plus a loose file: the import folder opens with the new folder and the new file selected
+await page.click('.upload-close');
+await page.setInputFiles('input[type=file]', [
+    { name: 'Second Album.zip', mimeType: 'application/zip', buffer: zipOf([{ name: '01.mp3', data: mp3 }]) },
+    { name: '05 - Loose.mp3', mimeType: 'audio/mpeg', buffer: mp3 },
+]);
+await page.waitForSelector('.upload-panel:not([hidden]) .upload-close', { timeout: 15000 });
+await page.waitForTimeout(500);
+const sel5 = await page.evaluate(() => [...window.metadataEditor.selectedItems].sort());
+check(await page.evaluate(() => window.metadataEditor.currentPath) === 'import', 'mixed: the import folder is open');
+check(JSON.stringify(sel5) === JSON.stringify(['directory:import/Second Album', 'file:import/05 - Loose.mp3']), 'mixed: new folder + new file selected', sel5);
 
 // 4: the drop hint itself (screenshot), light theme
 await page.evaluate(() => document.querySelector('.browser-panel').classList.add('drop-active'));

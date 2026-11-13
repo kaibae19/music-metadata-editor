@@ -1,7 +1,8 @@
 // File: public/js/upload.js
 // Upload (docs/upload-and-import.md, step 3): an "⬆️ Upload" button and a drop area over the file list. Files (or whole
-// folders) go one per request to POST /api/upload, which saves them into the import folder; then the import folder
-// opens with the new files selected, ready for 🎼 MusicBrainz. Shown only when the server says upload is on.
+// folders) go one per request to POST /api/upload, which saves them into the import folder; a .zip goes to
+// POST /api/upload/zip, which unpacks its audio into a new folder there. Then the new files open selected, ready for
+// 🎼 MusicBrainz. Shown only when the server says upload is on.
 // Everything shown is built with textContent (file names never reach innerHTML).
 
 (() => {
@@ -45,10 +46,10 @@
             this.info = info;                       // GET /api/upload: { enabled, maxBytes, extensions, importPath }
             this.busy = false;
 
-            this.input = el('input', { type: 'file', multiple: true, accept: info.extensions.join(','), hidden: true,
+            this.input = el('input', { type: 'file', multiple: true, accept: [...info.extensions, ...(info.zipMaxBytes ? ['.zip'] : [])].join(','), hidden: true,
                 onchange: () => { const files = [...this.input.files]; this.input.value = ''; this.upload(files); } });
             this.button = el('button', { class: 'select-all-btn', id: 'uploadBtn', type: 'button',
-                title: `Upload audio files into the import folder (${info.importPath}); or drop files or folders on the file list`,
+                title: `Upload audio files${info.zipMaxBytes ? ' or album zips' : ''} into the import folder (${info.importPath}); or drop files or folders on the file list`,
                 onclick: () => this.input.click() }, el('span', { text: '⬆️' }), el('span', { text: 'Upload' }));
             const importBtn = document.getElementById('importBtn');
             if (importBtn) importBtn.after(this.button); else document.querySelector('.selection-controls').append(this.button);
@@ -86,7 +87,11 @@
             const ok = [], skipped = [];
             for (const f of files) {
                 const x = ext(f.name);
-                if (x === '.zip') skipped.push({ name: f.name, why: 'a zip: unzip it first, then upload the files' });
+                if (x === '.zip') {
+                    if (!this.info.zipMaxBytes) skipped.push({ name: f.name, why: 'a zip: unzip it first, then upload the files' });
+                    else if (f.size > this.info.zipMaxBytes) skipped.push({ name: f.name, why: `a zip larger than ${mb(this.info.zipMaxBytes)}` });
+                    else ok.push(f);
+                }
                 else if (!this.info.extensions.includes(x)) skipped.push({ name: f.name, why: 'not an audio file' });
                 else if (f.size > this.info.maxBytes) skipped.push({ name: f.name, why: `larger than ${mb(this.info.maxBytes)}` });
                 else if (f.size === 0) skipped.push({ name: f.name, why: 'empty' });
@@ -97,15 +102,18 @@
 
         // One file per request (the server's contract); XHR for upload progress, which fetch doesn't report.
         send(file, onProgress) {
+            const isZip = ext(file.name) === '.zip';
             return new Promise(resolve => {
                 const xhr = new XMLHttpRequest();
-                xhr.open('POST', '/api/upload?name=' + encodeURIComponent(file.name));
+                xhr.open('POST', (isZip ? '/api/upload/zip' : '/api/upload') + '?name=' + encodeURIComponent(file.name));
                 xhr.setRequestHeader('Content-Type', 'application/octet-stream');
                 xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
                 xhr.onload = () => {
                     let body = {};
                     try { body = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
-                    resolve(xhr.status === 200 ? { saved: body.saved } : { error: body.error || `HTTP ${xhr.status}` });
+                    if (xhr.status !== 200) resolve({ error: body.error || `HTTP ${xhr.status}`, skipped: body.skipped });
+                    else if (isZip) resolve({ zip: { name: file.name, folder: body.folder, saved: body.saved || [], skipped: body.skipped || [] } });
+                    else resolve({ saved: body.saved });
                 };
                 xhr.onerror = () => resolve({ error: 'network error' });
                 xhr.send(file);
@@ -124,49 +132,65 @@
             this.button.disabled = true;
             const total = ok.reduce((n, f) => n + f.size, 0);
             let done = 0;
-            const saved = [], failed = [];
+            const saved = [], failed = [], zips = [];
             const bar = el('progress', { max: 1, value: 0 });
             const line = el('div', { class: 'upload-line' });
             this.show(line, bar);
             for (const [i, file] of ok.entries()) {
                 const at = (frac) => {
-                    line.textContent = `Uploading ${i + 1} of ${ok.length}: ${file.name} (${Math.round(frac * 100)}%)`;
+                    line.textContent = frac >= 1 && ext(file.name) === '.zip'
+                        ? `Unpacking ${file.name} (${i + 1} of ${ok.length})…`
+                        : `Uploading ${i + 1} of ${ok.length}: ${file.name} (${Math.round(frac * 100)}%)`;
                     bar.value = total ? (done + frac * file.size) / total : 0;
                 };
                 at(0);
                 const r = await this.send(file, at);
                 done += file.size;
-                if (r.saved) saved.push(r.saved); else failed.push({ name: file.name, why: r.error });
+                if (r.saved) saved.push(r.saved);
+                else if (r.zip) { zips.push(r.zip); for (const s of r.zip.skipped) skipped.push({ name: `${file.name} › ${s.name}`, why: s.why }); }
+                else {
+                    failed.push({ name: file.name, why: r.error });
+                    for (const s of r.skipped || []) skipped.push({ name: `${file.name} › ${s.name}`, why: s.why });
+                }
             }
             this.busy = false;
             this.button.disabled = false;
-            this.finish(saved, failed, skipped);
+            this.finish(saved, failed, skipped, zips);
         }
 
         // The summary stays until closed; then the import folder opens with the new files selected.
-        async finish(saved, failed, skipped) {
+        async finish(saved, failed, skipped, zips = []) {
             const parts = [];
             if (saved.length) parts.push(`Uploaded ${plural(saved.length, 'file')} into ${this.info.importPath}/`);
+            for (const z of zips) parts.push(`Unpacked ${z.name} into ${z.folder.path}/ (${plural(z.saved.length, 'file')})`);
             if (failed.length) parts.push(`${failed.length} failed`);
             if (skipped.length) parts.push(`${skipped.length} skipped`);
             const renamed = saved.filter(s => / \(\d+\)\.[^.]+$/.test(s.name));
-            const list = [...failed, ...skipped].map(f => el('li', {}, el('strong', { text: f.name }), ': ' + f.why));
+            const problems = [...failed, ...skipped];
+            const list = problems.slice(0, 12).map(f => el('li', {}, el('strong', { text: f.name }), ': ' + f.why));
+            if (problems.length > 12) list.push(el('li', { text: `… and ${problems.length - 12} more` }));
             if (renamed.length) list.push(el('li', { text: `${plural(renamed.length, 'name')} already existed there, so ${renamed.length === 1 ? 'it was' : 'they were'} saved as "… (2)" etc.: nothing was overwritten` }));
-            const next = saved.length ? el('div', { class: 'upload-next', text: 'They are selected: 🎼 MusicBrainz looks them up.' }) : null;
+            const anything = saved.length || zips.length;
+            const next = anything ? el('div', { class: 'upload-next', text: 'They are selected: 🎼 MusicBrainz looks them up.' }) : null;
             this.show(
                 el('div', { class: 'upload-line' }, el('span', { text: parts.join(' · ') || 'Nothing to upload' }),
                     el('button', { class: 'upload-close', type: 'button', title: 'Close', 'aria-label': 'Close', text: '✕', onclick: () => { this.panel.hidden = true; } })),
                 list.length ? el('ul', { class: 'upload-problems' }, list) : null,
                 next);
-            this.panel.className = 'upload-panel ' + (failed.length ? 'error' : skipped.length || !saved.length ? 'warning' : 'success');
-            if (!saved.length) return;
+            this.panel.className = 'upload-panel ' + (failed.length ? 'error' : skipped.length || !anything ? 'warning' : 'success');
+            if (!anything) return;
 
-            await this.editor.loadFiles(this.info.importPath);
+            // one album zip and nothing else: open its folder with its tracks selected; otherwise the import folder,
+            // with the new files and the new album folders selected
+            const single = zips.length === 1 && !saved.length;
+            const open = single ? zips[0].folder.path : this.info.importPath;
+            await this.editor.loadFiles(open);
             this.editor.clearSelection();
-            const want = new Set(saved.map(s => s.path));
-            for (const row of this.editor.fileList.querySelectorAll('.file-item[data-type="file"]')) {
-                if (!want.has(row.dataset.path)) continue;
-                this.editor.selectedItems.add('file:' + row.dataset.path);
+            const want = new Set(single ? zips[0].saved.map(s => s.path) : [...saved.map(s => 'file:' + s.path), ...zips.map(z => 'directory:' + z.folder.path)]);
+            for (const row of this.editor.fileList.querySelectorAll('.file-item[data-type="file"], .file-item[data-type="directory"]')) {
+                const key = row.dataset.type + ':' + row.dataset.path;
+                if (!(single ? row.dataset.type === 'file' && want.has(row.dataset.path) : want.has(key))) continue;
+                this.editor.selectedItems.add(key);
                 row.classList.add('multi-selected');
             }
             this.editor.updateSelectionUI();
